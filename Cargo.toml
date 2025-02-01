@@ -10,4 +10,5 @@ path = "src/lib.rs"
 [dependencies]
 rust_decimal = "1.17.0"
 csv = "1.1.6"
+thiserror = "2.0.10"
 

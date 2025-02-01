@@ -2,6 +2,7 @@
 use txn_engine::engine::read_and_process_transactions;
 use txn_engine::engine::Engine; // Note the path adjustment if needed
 use rust_decimal::Decimal;
+use txn_engine::engine::TransactionProcessingError;
 use std::str::FromStr;
 
 
@@ -79,8 +80,28 @@ fn test_errors() {
     let mut engine = Engine::default();
     let input_path = "tests/transactions_errors.csv";
     match read_and_process_transactions(&mut engine, input_path) {
-        Ok(()) => println!("Transactions processed successfully"),
-        Err(e) => println!(" Some error occurred while processing transactions: {}", e),
+        Ok(()) => panic!("Expected an error, but got success"),
+        Err(TransactionProcessingError::MultipleErrors(errors)) => {
+            let expected_errors = vec![
+                "Error processing transaction Transaction { ty: Deposit, client: 6, tx: 9, amount: Some(0.0000) }: Deposit amount must be greater than 0",
+                "Error processing transaction Transaction { ty: Withdrawal, client: 6, tx: 10, amount: Some(-5.0000) }: Withdrawal amount must be greater than 0",
+                "Error processing transaction Transaction { ty: Deposit, client: 6, tx: 12, amount: Some(5000.0000) }: Addition overflow",
+                "Error processing transaction Transaction { ty: Withdrawal, client: 6, tx: 13, amount: None }: Transaction must have an amount",
+                "Error processing transaction Transaction { ty: Deposit, client: 7, tx: 14, amount: None }: Transaction must have an amount",
+                "Error processing transaction Transaction { ty: Deposit, client: 7, tx: 15, amount: Some(10) }: Transaction id already processed in this session - cannot be repeated.",
+                "Error processing transaction Transaction { ty: Dispute, client: 7, tx: 16, amount: None }: Transaction not found",
+                "Error processing transaction Transaction { ty: Resolve, client: 6, tx: 9999, amount: None }: Transaction not found",
+                "Error processing transaction Transaction { ty: Chargeback, client: 7, tx: 16, amount: None }: Transaction not found",
+            ];
+
+            // Compare the sorted errors to ensure the order doesn't matter
+            let mut actual_errors = errors.clone();
+            actual_errors.sort();
+            let mut expected_errors_sorted = expected_errors;
+            expected_errors_sorted.sort();
+
+            assert_eq!(actual_errors, expected_errors_sorted, "Errors do not match expected errors");
+        }
     }
     assert_eq!(engine.accounts.len(), 2);
 }
