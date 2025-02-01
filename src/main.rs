@@ -2,6 +2,22 @@ use std::env;
 use txn_engine::engine::{read_and_process_transactions, Engine};
 use csv::Writer;
 
+
+
+/// This program takes a single command line argument, the path to a CSV file
+/// containing transactions. The program processes the transactions and writes
+/// the resulting account balances to stdout in CSV format.
+///
+/// The CSV file should have the following format:
+/// type,       client, tx,    amount
+/// deposit,    1,     1,      1.0
+/// withdrawal, 1,     2,      1.5
+/// dispute,    1,     1,
+/// resolve,    1,     1,
+/// chargeback, 1,     1,
+///
+/// The program will exit with a non-zero status if any error occurs while
+/// processing the transactions.
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<String> = env::args().collect();
     if args.len() != 2 {

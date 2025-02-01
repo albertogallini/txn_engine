@@ -11,6 +11,16 @@ pub struct Account {
     pub locked: bool,
 }
 
+/// Writes the account balances to the standard output in CSV format.
+///
+/// # Parameters
+/// - `accounts`: A reference to a `HashMap` where the key is a `u16` representing the client ID,
+///   and the value is an `Account` containing the balance details.
+///
+/// # Returns
+/// - `Ok(())`: If the account balances are successfully written.
+/// - `Err(Box<dyn std::error::Error>)`: If there is an error during writing.
+
 pub fn write_account_balances(
     accounts: &HashMap<u16, Account>,
 ) -> Result<(), Box<dyn std::error::Error>> {
