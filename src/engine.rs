@@ -71,6 +71,9 @@ impl Engine {
 }
 
 impl EngineFunctions for Engine {
+    
+    /// Process a transaction. This function is a dispatch to the correct processing function
+    /// for the given transaction type.
     fn process_transaction(&mut self, tx: &Transaction) -> Result<(), Box<dyn Error>> {
         match tx.ty {
             TransactionType::Deposit => self.process_deposit(tx)?,
@@ -81,6 +84,7 @@ impl EngineFunctions for Engine {
         }
         Ok(())
     }
+
 
     fn process_deposit(&mut self, tx: &Transaction) -> Result<(), Box<dyn Error>> {
         let amount = tx.amount.ok_or(Self::ERROR_NO_AMOUNT)?;
@@ -95,6 +99,10 @@ impl EngineFunctions for Engine {
             .accounts
             .entry(tx.client)
             .or_insert_with(Account::default);
+
+        if account.locked {
+            return Err(Self::ERROR_ACCOUNT_LOCKED.into());
+        }
 
         account.available =  Engine::safe_add(&account.available,&amount)?;
         account.total =  Engine::safe_add(&account.total,&amount)?;
@@ -112,6 +120,9 @@ impl EngineFunctions for Engine {
             return Err(Self::ERROR_TX_REPEATED.into());
         }
         if let Some(account) = self.accounts.get_mut(&tx.client) {
+            if account.locked {
+                return Err(Self::ERROR_ACCOUNT_LOCKED.into());
+            }
             if account.available >= amount {
                 account.available =  Engine::safe_sub(&account.available,&amount)?;
                 account.total =  Engine::safe_sub(&account.total,&amount)?;
@@ -128,6 +139,9 @@ impl EngineFunctions for Engine {
     
     fn process_dispute(&mut self, tx: &Transaction) -> Result<(), Box<dyn Error>> {
         if let Some(account) = self.accounts.get_mut(&tx.client) {
+            if account.locked {
+                return Err(Self::ERROR_ACCOUNT_LOCKED.into());
+            }
             if let Some(original_tx) = self.transaction_log.get(&tx.tx) {
                 let amount = Engine::check_transasction(tx,original_tx)?;
                 account.available =  Engine::safe_sub(&account.available,&amount)?;
@@ -143,6 +157,9 @@ impl EngineFunctions for Engine {
 
     fn process_resolve(&mut self, tx: &Transaction) -> Result<(), Box<dyn Error>> {
         if let Some(account) = self.accounts.get_mut(&tx.client) {
+            if account.locked {
+                return Err(Self::ERROR_ACCOUNT_LOCKED.into());
+            }
             if let Some(original_tx) = self.transaction_log.get(&tx.tx) {
                 let amount = Engine::check_transasction(tx,original_tx)?;
                 account.available =  Engine::safe_add(&account.available,&amount)?;
@@ -158,6 +175,9 @@ impl EngineFunctions for Engine {
 
     fn process_chargeback(&mut self, tx: &Transaction) -> Result<(), Box<dyn Error>> {
         if let Some(account) = self.accounts.get_mut(&tx.client) {
+            if account.locked {
+                return Err(Self::ERROR_ACCOUNT_LOCKED.into());
+            }
             if let Some(original_tx) = self.transaction_log.get(&tx.tx) {
                 let amount = Engine::check_transasction(tx,original_tx)?;
                 account.total =  Engine::safe_sub(&account.total,&amount)?;
@@ -224,7 +244,7 @@ pub fn read_and_process_transactions(
 
             if let Err(e) = engine.process_transaction(&transaction) {
                 errors.push(format!(
-                    "Error processing transaction {:?}: {}",
+                    "Error processing {:?}: {}",
                     transaction, e
                 ));
             }

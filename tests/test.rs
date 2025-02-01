@@ -83,15 +83,16 @@ fn test_errors() {
         Ok(()) => panic!("Expected an error, but got success"),
         Err(TransactionProcessingError::MultipleErrors(errors)) => {
             let expected_errors = vec![
-                "Error processing transaction Transaction { ty: Deposit, client: 6, tx: 9, amount: Some(0.0000) }: Deposit amount must be greater than 0",
-                "Error processing transaction Transaction { ty: Withdrawal, client: 6, tx: 10, amount: Some(-5.0000) }: Withdrawal amount must be greater than 0",
-                "Error processing transaction Transaction { ty: Deposit, client: 6, tx: 12, amount: Some(5000.0000) }: Addition overflow",
-                "Error processing transaction Transaction { ty: Withdrawal, client: 6, tx: 13, amount: None }: Transaction must have an amount",
-                "Error processing transaction Transaction { ty: Deposit, client: 7, tx: 14, amount: None }: Transaction must have an amount",
-                "Error processing transaction Transaction { ty: Deposit, client: 7, tx: 15, amount: Some(10) }: Transaction id already processed in this session - cannot be repeated.",
-                "Error processing transaction Transaction { ty: Dispute, client: 7, tx: 16, amount: None }: Transaction not found",
-                "Error processing transaction Transaction { ty: Resolve, client: 6, tx: 9999, amount: None }: Transaction not found",
-                "Error processing transaction Transaction { ty: Chargeback, client: 7, tx: 16, amount: None }: Transaction not found",
+                "Error processing Transaction { ty: Deposit, client: 6, tx: 9, amount: Some(0.0000) }: Deposit amount must be greater than 0",
+                "Error processing Transaction { ty: Withdrawal, client: 6, tx: 10, amount: Some(-5.0000) }: Withdrawal amount must be greater than 0",
+                "Error processing Transaction { ty: Deposit, client: 6, tx: 12, amount: Some(5000.0000) }: Addition overflow",
+                "Error processing Transaction { ty: Withdrawal, client: 6, tx: 13, amount: None }: Transaction must have an amount",
+                "Error processing Transaction { ty: Deposit, client: 7, tx: 14, amount: None }: Transaction must have an amount",
+                "Error processing Transaction { ty: Deposit, client: 7, tx: 15, amount: Some(10) }: Transaction id already processed in this session - cannot be repeated.",
+                "Error processing Transaction { ty: Dispute, client: 7, tx: 16, amount: None }: Transaction not found",
+                "Error processing Transaction { ty: Resolve, client: 6, tx: 9999, amount: None }: Transaction not found",
+                "Error processing Transaction { ty: Chargeback, client: 7, tx: 16, amount: None }: Transaction not found",
+                "Error processing Transaction { ty: Deposit, client: 7, tx: 17, amount: Some(10) }: Account is locked",
             ];
 
             // Compare the sorted errors to ensure the order doesn't matter
