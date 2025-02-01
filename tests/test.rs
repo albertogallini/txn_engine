@@ -67,12 +67,19 @@ withdrawal ,6     ,13   ,              # Empty amount --> fail
 
 deposit    ,7     ,14   ,              # Empty amount --> fail
 deposit    ,7     ,15   ,10.0              
-deposit    ,7     ,15   ,10.0          # Duplicate tx                                       !!!!!
+deposit    ,7     ,15   ,10.0          # Duplicate tx
 dispute    ,7     ,16   ,              # Dispute on non-existent or invalid tx
 
 resolve    ,6     ,9999 ,              # Resolve on non-existent tx
 
 chargeback ,7     ,16   ,              # Chargeback on non-existent tx
+
+dispute    ,7     ,15   , 
+dispute    ,7     ,15   ,              # Transaction already disputed
+chargeback ,7     ,15   , 
+deposit    ,7     ,17   ,10            # Account is locked
+deposit    ,8     ,18   ,10
+resolve    ,8     ,18   ,              # Transaction not disputed
 */
 
 #[test]
@@ -83,16 +90,18 @@ fn test_errors() {
         Ok(()) => panic!("Expected an error, but got success"),
         Err(TransactionProcessingError::MultipleErrors(errors)) => {
             let expected_errors = vec![
-                "Error processing Transaction { ty: Deposit, client: 6, tx: 9, amount: Some(0.0000) }: Deposit amount must be greater than 0",
-                "Error processing Transaction { ty: Withdrawal, client: 6, tx: 10, amount: Some(-5.0000) }: Withdrawal amount must be greater than 0",
-                "Error processing Transaction { ty: Deposit, client: 6, tx: 12, amount: Some(5000.0000) }: Addition overflow",
-                "Error processing Transaction { ty: Withdrawal, client: 6, tx: 13, amount: None }: Transaction must have an amount",
-                "Error processing Transaction { ty: Deposit, client: 7, tx: 14, amount: None }: Transaction must have an amount",
-                "Error processing Transaction { ty: Deposit, client: 7, tx: 15, amount: Some(10) }: Transaction id already processed in this session - cannot be repeated.",
-                "Error processing Transaction { ty: Dispute, client: 7, tx: 16, amount: None }: Transaction not found",
-                "Error processing Transaction { ty: Resolve, client: 6, tx: 9999, amount: None }: Transaction not found",
-                "Error processing Transaction { ty: Chargeback, client: 7, tx: 16, amount: None }: Transaction not found",
-                "Error processing Transaction { ty: Deposit, client: 7, tx: 17, amount: Some(10) }: Account is locked",
+                "Error processing Transaction { ty: Deposit, client: 6, tx: 9, amount: Some(0.0000), disputed: false }: Deposit amount must be greater than 0",
+                "Error processing Transaction { ty: Withdrawal, client: 6, tx: 10, amount: Some(-5.0000), disputed: false }: Withdrawal amount must be greater than 0",
+                "Error processing Transaction { ty: Deposit, client: 6, tx: 12, amount: Some(5000.0000), disputed: false }: Addition overflow",
+                "Error processing Transaction { ty: Withdrawal, client: 6, tx: 13, amount: None, disputed: false }: Transaction must have an amount",
+                "Error processing Transaction { ty: Deposit, client: 7, tx: 14, amount: None, disputed: false }: Transaction must have an amount",
+                "Error processing Transaction { ty: Deposit, client: 7, tx: 15, amount: Some(10), disputed: false }: Transaction id already processed in this session - cannot be repeated.",
+                "Error processing Transaction { ty: Dispute, client: 7, tx: 16, amount: None, disputed: false }: Transaction not found",
+                "Error processing Transaction { ty: Resolve, client: 6, tx: 9999, amount: None, disputed: false }: Transaction not found",
+                "Error processing Transaction { ty: Chargeback, client: 7, tx: 16, amount: None, disputed: false }: Transaction not found",
+                "Error processing Transaction { ty: Dispute, client: 7, tx: 15, amount: None, disputed: false }: Transaction already disputed",
+                "Error processing Transaction { ty: Deposit, client: 7, tx: 17, amount: Some(10), disputed: false }: Account is locked",
+                "Error processing Transaction { ty: Resolve, client: 8, tx: 18, amount: None, disputed: false }: Transaction not disputed",
             ];
 
             // Compare the sorted errors to ensure the order doesn't matter
@@ -104,5 +113,5 @@ fn test_errors() {
             assert_eq!(actual_errors, expected_errors_sorted, "Errors do not match expected errors");
         }
     }
-    assert_eq!(engine.accounts.len(), 2);
+    assert_eq!(engine.accounts.len(), 3);
 }

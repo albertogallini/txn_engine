@@ -48,6 +48,7 @@ pub struct Transaction {
     pub client: ClientId,
     pub tx: TxId,
     pub amount: Option<Decimal>,
+    pub disputed: bool,
 }
 
 impl Transaction {
@@ -62,6 +63,7 @@ impl Transaction {
             } else {
                 Some(Decimal::from_str(record[3].trim())?)
             },
+            disputed: false,
         })
     }
 }

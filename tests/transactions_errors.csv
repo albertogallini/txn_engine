@@ -11,5 +11,8 @@ dispute,7,16,
 resolve,6,9999,
 chargeback,7,16,
 dispute,7,15, 
+dispute,7,15, 
 chargeback,7,15,
 deposit,7,17,10
+deposit,8,18,10
+resolve,8,18,
