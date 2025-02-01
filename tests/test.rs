@@ -115,3 +115,27 @@ fn test_errors() {
     }
     assert_eq!(engine.accounts.len(), 3);
 }
+
+
+
+#[test]
+fn test_decimal_precision() {
+    let mut engine = Engine::default();
+    let input_path = "tests/digits.csv";
+    match read_and_process_transactions(&mut engine, input_path) {
+        Ok(()) => println!("Transactions processed successfully"),
+        Err(e) => println!("Some error occurred while processing transactions: {}", e),
+    }
+    println!("Accounts: {:#?}", engine.accounts);
+    
+    // Check if we have processed transactions for exactly one client
+    assert_eq!(engine.accounts.len(), 1, "Should have processed transactions for one client");
+
+    // Check specific account details
+    let account = engine.accounts.get(&1).expect("Account 1 should exist");
+    
+    // Here are assertions for each transaction based on the expected rounding:
+    assert_eq!(account.total, Decimal::from_str("7.7129").unwrap());
+    assert_eq!(account.available, Decimal::from_str("7.7129").unwrap());
+    assert_eq!(account.held, Decimal::from_str("0.0000").unwrap());
+}

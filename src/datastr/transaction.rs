@@ -1,5 +1,5 @@
 use csv::StringRecord;
-use rust_decimal::Decimal;
+use rust_decimal::{Decimal, RoundingStrategy};
 use std::{fmt, str::FromStr};
 
 pub type TxId = u32;
@@ -81,8 +81,11 @@ impl Transaction {
             None
         } else {
             let mut decimal = Decimal::from_str(record[3].trim())?;
+            // debug -- println!("Rounded decimal: {:?}", decimal); // Debug representation
             // Round to 4 decimal places
-            decimal = decimal.round_dp(4);
+            decimal = decimal.round_dp_with_strategy(4, RoundingStrategy::MidpointAwayFromZero);
+            //debug -- println!("Rounded decimal: {:?}", decimal); // Debug representation
+
             Some(decimal)
         };
 
