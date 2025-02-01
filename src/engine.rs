@@ -1,5 +1,5 @@
 use crate::datastr::account::Account;
-use crate::datastr::transaction::{ClientId, Transaction, TransactionType, TxId};
+use crate::datastr::transaction::{ClientId, Transaction, TransactionProcessingError, TransactionType, TxId};
 use std::collections::HashMap;
 use std::error::Error;
 
@@ -264,13 +264,7 @@ impl EngineFunctions for Engine {
 
 const BATCH_SIZE: usize = 16_384;
 
-use thiserror::Error;
 
-#[derive(Error, Debug)]
-pub enum TransactionProcessingError {
-    #[error("Multiple errors occurred: {0:?}")]
-    MultipleErrors(Vec<String>),
-}
 
 pub fn read_and_process_transactions(
     engine: &mut Engine,

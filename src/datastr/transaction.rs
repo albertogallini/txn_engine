@@ -67,3 +67,23 @@ impl Transaction {
         })
     }
 }
+
+
+#[derive(Debug)]
+pub enum TransactionProcessingError {
+    MultipleErrors(Vec<String>),
+}
+
+impl fmt::Display for TransactionProcessingError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            TransactionProcessingError::MultipleErrors(errors) => {
+                writeln!(f, "Some errors occurred while processing transactions:")?;
+                for error in errors {
+                    writeln!(f, "  - {}", error)?;
+                }
+                Ok(())
+            }
+        }
+    }
+}

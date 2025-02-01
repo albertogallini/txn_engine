@@ -2,7 +2,7 @@
 use txn_engine::engine::read_and_process_transactions;
 use txn_engine::engine::Engine; // Note the path adjustment if needed
 use rust_decimal::Decimal;
-use txn_engine::engine::TransactionProcessingError;
+use txn_engine::datastr::transaction::TransactionProcessingError;
 use std::str::FromStr;
 
 
