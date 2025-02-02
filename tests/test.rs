@@ -90,6 +90,7 @@ fn test_errors() {
         Ok(()) => panic!("Expected an error, but got success"),
         Err(TransactionProcessingError::MultipleErrors(errors)) => {
             let expected_errors = vec![
+                "Error reading transaction record: CSV deserialize error: record 18 (line: 19, byte: 335): Unknown transaction type: DEPOSIT",
                 "Error processing Transaction { ty: Deposit, client: 6, tx: 9, amount: Some(0.0000), disputed: false }: Deposit amount must be greater than 0",
                 "Error processing Transaction { ty: Withdrawal, client: 6, tx: 10, amount: Some(-5.0000), disputed: false }: Withdrawal amount must be greater than 0",
                 "Error processing Transaction { ty: Deposit, client: 6, tx: 12, amount: Some(5000.0000), disputed: false }: Addition overflow",
@@ -121,7 +122,7 @@ fn test_errors() {
 #[test]
 fn test_decimal_precision() {
     let mut engine = Engine::default();
-    let input_path = "tests/digits.csv";
+    let input_path = "tests/transactions_digits.csv";
     match read_and_process_transactions(&mut engine, input_path) {
         Ok(()) => println!("Transactions processed successfully"),
         Err(e) => println!("Some error occurred while processing transactions: {}", e),

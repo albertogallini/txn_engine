@@ -318,6 +318,7 @@ const BATCH_SIZE: usize = 16_384;
 
 
 
+
 pub fn read_and_process_transactions(
     engine: &mut Engine,
     input_path: &str,
@@ -334,10 +335,10 @@ pub fn read_and_process_transactions(
     loop {
         let mut records = Vec::new();
         for _ in 0..BATCH_SIZE {
-            match csv_reader.records().next() {
+            match csv_reader.deserialize::<Transaction>().next() {
                 Some(Ok(record)) => records.push(record),
                 Some(Err(e)) => {
-                    errors.push(format!("CSV parsing error: {}", e));
+                    errors.push(format!("Error reading transaction record: {}", e));
                     continue;
                 }
                 None => break,
@@ -348,15 +349,7 @@ pub fn read_and_process_transactions(
             break;
         }
 
-        for record in records {
-            let transaction = match Transaction::from_record(&record) {
-                Ok(tx) => tx,
-                Err(e) => {
-                    errors.push(format!("Error creating transaction from record: {}", e));
-                    continue;
-                }
-            };
-
+        for transaction in records {
             if let Err(e) = engine.process_transaction(&transaction) {
                 errors.push(format!(
                     "Error processing {:?}: {}",
@@ -372,4 +365,3 @@ pub fn read_and_process_transactions(
         Ok(())
     }
 }
-

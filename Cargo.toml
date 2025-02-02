@@ -11,4 +11,5 @@ path = "src/lib.rs"
 rust_decimal = "1.17.0"
 csv = "1.1.6"
 thiserror = "2.0.10"
+serde = { version = "1.0", features = ["derive"] }
 

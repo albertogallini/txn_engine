@@ -26,76 +26,69 @@ impl fmt::Display for TransactionType {
     }
 }
 
-impl FromStr for TransactionType {
-    type Err = String;
 
-    /// Converts a string to a `TransactionType`. The string is case-insensitive
-    /// and can be any of the following:
-    ///
-    /// - "deposit"
-    /// - "withdrawal"
-    /// - "dispute"
-    /// - "resolve"
-    /// - "chargeback"
-    ///
-    /// If the string is not any of the above, an error is returned.
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s.to_lowercase().as_str() {
+
+use serde::{de, Deserialize, Deserializer};
+
+#[derive(Deserialize, Debug, Clone)]
+pub struct Transaction {
+    #[serde(rename = "type")]
+    pub ty: TransactionType,
+    pub client: u16,
+    pub tx: u32,
+    #[serde(deserialize_with = "deserialize_amount")]
+    pub amount: Option<Decimal>,
+    #[serde(default)]
+    pub disputed: bool,
+}
+
+impl<'de> Deserialize<'de> for TransactionType {
+/// Deserializes a `TransactionType` from a string representation.
+///
+/// # Parameters
+/// - `deserializer`: The deserializer to read the string from.
+///
+/// # Returns
+/// - `Ok(TransactionType)`: The corresponding `TransactionType` if the string matches
+///   a known transaction type.
+/// - `Err(D::Error)`: If the string does not match any known transaction type.
+
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        match s.as_str() {
             "deposit" => Ok(TransactionType::Deposit),
             "withdrawal" => Ok(TransactionType::Withdrawal),
             "dispute" => Ok(TransactionType::Dispute),
             "resolve" => Ok(TransactionType::Resolve),
             "chargeback" => Ok(TransactionType::Chargeback),
-            _ => Err(format!("Unknown transaction type: {}", s)),
+            _ => Err(serde::de::Error::custom(format!("Unknown transaction type: {}", s))),
         }
     }
 }
 
-// Represents a transaction
-#[derive(Debug, Clone)]
-pub struct Transaction {
-    pub ty: TransactionType,
-    pub client: ClientId,
-    pub tx: TxId,
-    pub amount: Option<Decimal>,
-    pub disputed: bool,
-}
-
-impl Transaction {
-    /// Creates a `Transaction` from a `StringRecord` read from a CSV file.
-    ///
-    /// # Parameters
-    /// - `record`: A `StringRecord` read from a CSV file.
-    ///
-    /// # Returns
-    /// - `Ok(Transaction)`: If the record is successfully parsed.
-    /// - `Err(Box<dyn Error>)`: If the record is invalid or if the transaction type is unknown.
-    ///
-    /// # Errors
-    /// - `ERROR_UNKNOWN_TRANSACTION_TYPE`: If the transaction type is unknown.
-    pub fn from_record(record: &StringRecord) -> Result<Self, Box<dyn std::error::Error>> {
-        let ty = TransactionType::from_str(&record[0].trim())?;
-        let client = record[1].parse()?;
-        let tx = record[2].parse()?;
-        let amount = if record[3].trim().is_empty() {
-            None
-        } else {
-            let mut decimal = Decimal::from_str(record[3].trim())?;
-            // debug -- println!("Rounded decimal: {:?}", decimal); // Debug representation
-            // Round to 4 decimal places
-            decimal = decimal.round_dp_with_strategy(4, RoundingStrategy::MidpointAwayFromZero);
-            //debug -- println!("Rounded decimal: {:?}", decimal); // Debug representation
-
-            Some(decimal)
-        };
-
-        Ok(Transaction {
-            ty,
-            client,
-            tx,
-            amount,
-            disputed: false,
-        })
+/// Deserialize an amount from a CSV string.
+///
+/// If the string is empty, the result is `None`. Otherwise, the amount is parsed
+/// from the string and rounded to four decimal places using the midpoint away
+/// from zero rounding strategy. If parsing fails, an error is returned.
+fn deserialize_amount<'de, D>(deserializer: D) -> Result<Option<Decimal>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let s: Option<String> = Option::deserialize(deserializer)?;
+    match s {
+        Some(ref v) if !v.trim().is_empty() => {
+            Decimal::from_str(v.trim())
+                .map(|mut d| {
+                    d = d.round_dp_with_strategy(4, RoundingStrategy::MidpointAwayFromZero);
+                    Some(d)
+                })
+                .map_err(de::Error::custom)
+        },
+        _ => Ok(None),
     }
 }
 
