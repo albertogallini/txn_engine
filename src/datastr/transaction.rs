@@ -49,12 +49,25 @@ without changing your core data structures. This makes your code more adaptable 
 pub struct Transaction {
     #[serde(rename = "type")]
     pub ty: TransactionType,
+    #[serde(deserialize_with = "deserialize_trimmed_string::<u16,_>")]
     pub client: u16,
+    #[serde(deserialize_with = "deserialize_trimmed_string::<u32,_>")]
     pub tx: u32,
     #[serde(deserialize_with = "deserialize_amount")]
     pub amount: Option<Decimal>,
     #[serde(default)]
     pub disputed: bool,
+}
+
+// Helper function to deserialize and trim strings for any type T that can be FromStr
+fn deserialize_trimmed_string<'de, T, D>(deserializer: D) -> Result<T, D::Error>
+where
+    T: FromStr,
+    T::Err: fmt::Display,
+    D: Deserializer<'de>,
+{
+    let s = String::deserialize(deserializer)?;
+    T::from_str(s.trim()).map_err(de::Error::custom)
 }
 
 impl<'de> Deserialize<'de> for TransactionType {
@@ -72,7 +85,7 @@ impl<'de> Deserialize<'de> for TransactionType {
         D: Deserializer<'de>,
     {
         let s = String::deserialize(deserializer)?;
-        match s.as_str() {
+        match s.as_str().trim() {
             "deposit" => Ok(TransactionType::Deposit),
             "withdrawal" => Ok(TransactionType::Withdrawal),
             "dispute" => Ok(TransactionType::Dispute),

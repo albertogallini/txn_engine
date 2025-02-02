@@ -38,5 +38,5 @@ for i in $(seq 100 100000 1000100); do
 done
 
 # Print the series from the output file
-echo "Transactions Count, Time, Memory (MB)"
+echo "Transactions Count, Time, Process Memory (MB), Engine Memory (MB)"
 cat "$output_file"

@@ -17,3 +17,6 @@ deposit,7,17,10
 deposit,8,18,10
 resolve,8,18,
 DEPOSIT,8,19,5
+deposit,9,20,100
+withdrawal,9,21,200
+dispute,9,21,

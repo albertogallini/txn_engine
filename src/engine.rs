@@ -55,7 +55,7 @@ impl Engine {
     /// - `original_tx`: The original transaction that `tx` is related to.
     ///
     /// # Returns
-    /// - `Ok(Decimal)`: The amount associated with the original transaction, possibly negated if
+    /// - `Ok(Decimal)`: The amount associated with the original transaction, POSSIBILY WITH A NEGATIVE SIGN if
     ///   the original transaction was a withdrawal.
     /// - `Err(Box<dyn Error>)`: An error if the transactions have different clients, the transaction
     ///   type requires a disputed status that doesn't match, or if the original transaction lacks an amount.

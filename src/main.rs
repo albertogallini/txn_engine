@@ -52,12 +52,12 @@ fn generate_random_transactions(
             3 => "resolve",
             _ => "chargeback",
         };
-        let client = rng.gen_range(1..=1000);
-        let tx = rng.gen_range(1..=1000000);
+        let client = rng.gen_range(1..=1_000);
+        let tx = rng.gen_range(1..=10_000);
         let amount = if ty == "dispute" || ty == "resolve" || ty == "chargeback" {
             "".to_string()
         } else {
-            format!("{:.4}", rng.gen_range(0.0..10000.0))
+            format!("{:.4}", rng.gen_range(0.0..10_000.0))
         };
         writeln!(writer, "{},{},{},{}", ty, client, tx, amount)?;
     }
