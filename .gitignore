@@ -1,3 +1,4 @@
 /target
 *.pdf
 output.csv
+stress_test_results*

@@ -107,6 +107,27 @@ impl Engine {
         a.checked_sub(*b)
             .ok_or(Self::ERROR_SUBTRACTION_OVERFLOW.into())
     }
+
+    /// Estimates the memory size of the `Engine` including all its data structures.
+    ///
+    /// This method provides an APPROXIMATE size in bytes since it can't account for
+    /// all memory overheads like those in hashmaps or other complex data structures.
+    ///
+    /// # Returns
+    /// - `usize`: The estimated size in bytes.
+    pub fn size_of(&self) -> usize {
+        // Size of the Engine struct itself
+        let mut size = size_of_val(self);
+
+        // Size of accounts HashMap
+        size += self.accounts.capacity() * (size_of::<ClientId>() + size_of::<Account>());
+        // We're making a rough estimate here. Each HashMap entry might not be fully utilized.
+
+        // Size of transaction_log HashMap
+        size += self.transaction_log.capacity() * (size_of::<TxId>() + size_of::<Transaction>());
+
+        size
+    }
 }
 
 impl EngineFunctions for Engine {
