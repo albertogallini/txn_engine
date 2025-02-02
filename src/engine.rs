@@ -146,10 +146,7 @@ impl EngineFunctions for Engine {
             return Err(Self::ERROR_TX_REPEATED.into());
         }
 
-        let account = self
-            .accounts
-            .entry(tx.client)
-            .or_default();
+        let account = self.accounts.entry(tx.client).or_default();
 
         if account.locked {
             return Err(Self::ERROR_ACCOUNT_LOCKED.into());
@@ -335,7 +332,17 @@ pub fn read_and_process_transactions(
             match csv_reader.deserialize::<Transaction>().next() {
                 Some(Ok(record)) => records.push(record),
                 Some(Err(e)) => {
-                    errors.push(format!("Error reading transaction record: {}", e));
+                    let error_message = e.to_string();
+                    // Do not want to print the whole error message, just the part coming from the
+                    // Transaction deserializer, if possible.
+                    if let Some(pos) = error_message.find("Unknown transaction type") {
+                        errors.push(format!(
+                            "Error reading transaction record: {}",
+                            &error_message[pos..]
+                        ));
+                    } else {
+                        errors.push(format!("Error reading transaction record: {}", e));
+                    }
                     continue;
                 }
                 None => break,
