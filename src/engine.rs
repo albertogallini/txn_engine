@@ -4,10 +4,41 @@ use crate::datastr::transaction::{
 };
 use dashmap::DashMap;
 use std::error::Error;
+use thiserror::Error;
 
 use csv::ReaderBuilder;
 use rust_decimal::Decimal;
 use std::io::BufReader;
+
+#[derive(Debug, Error)]
+pub enum EngineError {
+    #[error("Cannot dispute transaction from a different client")]
+    DifferentClient,
+    #[error("Transaction must have an amount")]
+    NoAmount,
+    #[error("Deposit amount must be greater than 0")]
+    DepositAmountInvalid,
+    #[error("Withdrawal amount must be greater than 0")]
+    WithdrawalAmountInvalid,
+    #[error("Transaction id already processed in this session - cannot be repeated.")]
+    TransactionRepeated,
+    #[error("Insufficient funds")]
+    InsufficientFunds,
+    #[error("Account not found")]
+    AccountNotFound,
+    #[error("Transaction not found")]
+    TransactionNotFound,
+    #[error("Addition overflow")]
+    AdditionOverflow,
+    #[error("Subtraction overflow")]
+    SubtractionOverflow,
+    #[error("Account is locked")]
+    AccountLocked,
+    #[error("Transaction already disputed")]
+    TransactionAlreadyDisputed,
+    #[error("Transaction not disputed")]
+    TransactionNotDisputed,
+}
 
 #[derive(Default)]
 pub struct Engine {
@@ -25,22 +56,6 @@ pub trait EngineFunctions {
 }
 
 impl Engine {
-    const ERROR_DIFFERENT_CLIENT: &'static str =
-        "Cannot dispute transaction from a different client";
-    const ERROR_NO_AMOUNT: &'static str = "Transaction must have an amount";
-    const ERROR_DEPOSIT_AMOUNT: &'static str = "Deposit amount must be greater than 0";
-    const ERROR_WITHDRAWAL_AMOUNT: &'static str = "Withdrawal amount must be greater than 0";
-    const ERROR_TX_REPEATED: &'static str =
-        "Transaction id already processed in this session - cannot be repeated.";
-    const ERROR_INSUFFICIENT_FUNDS: &'static str = "Insufficient funds";
-    const ERROR_ACCOUNT_NOT_FOUND: &'static str = "Account not found";
-    const ERROR_TX_NOT_FOUND: &'static str = "Transaction not found";
-    const ERROR_ADDITION_OVERFLOW: &'static str = "Addition overflow";
-    const ERROR_SUBTRACTION_OVERFLOW: &'static str = "Subtraction overflow";
-    const ERROR_ACCOUNT_LOCKED: &'static str = "Account is locked";
-    const ERROR_TX_ALREADY_DISPUTED: &'static str = "Transaction already disputed";
-    const ERROR_TX_NOT_DISPUTED: &'static str = "Transaction not disputed";
-
     pub fn new() -> Self {
         Engine {
             accounts: DashMap::new(),
@@ -55,42 +70,37 @@ impl Engine {
     /// - `original_tx`: The original transaction that `tx` is related to.
     ///
     /// # Returns
-    /// - `Ok(Decimal)`: The amount associated with the original transaction, POSSIBILY WITH A NEGATIVE SIGN if
+    /// - `Ok(Decimal)`: The amount associated with the original transaction, POSSIBLY WITH A NEGATIVE SIGN if
     ///   the original transaction was a withdrawal.
-    /// - `Err(Box<dyn Error>)`: An error if the transactions have different clients, the transaction
+    /// - `Err(EngineError)`: An error if the transactions have different clients, the transaction
     ///   type requires a disputed status that doesn't match, or if the original transaction lacks an amount.
     ///
     /// # Errors
-    /// - `ERROR_DIFFERENT_CLIENT`: If the transactions are from different clients.
-    /// - `ERROR_TX_ALREADY_DISPUTED`: If a dispute is attempted on an already disputed transaction.
-    /// - `ERROR_TX_NOT_DISPUTED`: If a resolve or chargeback is attempted on a non-disputed transaction.
-    /// - `ERROR_NO_AMOUNT`: If the original transaction does not have an amount.
+    /// - `DifferentClient`: If the transactions are from different clients.
+    /// - `TransactionAlreadyDisputed`: If a dispute is attempted on an already disputed transaction.
+    /// - `TransactionNotDisputed`: If a resolve or chargeback is attempted on a non-disputed transaction.
+    /// - `NoAmount`: If the original transaction does not have an amount.
     fn check_transaction_semantic(
         tx: &Transaction,
         original_tx: &Transaction,
-    ) -> Result<Decimal, Box<dyn Error>> {
+    ) -> Result<Decimal, EngineError> {
         if original_tx.client != tx.client {
-            return Err(Self::ERROR_DIFFERENT_CLIENT.into());
+            return Err(EngineError::DifferentClient);
         }
         match tx.ty {
             TransactionType::Dispute => {
                 if original_tx.disputed {
-                    return Err(Self::ERROR_TX_ALREADY_DISPUTED.into());
+                    return Err(EngineError::TransactionAlreadyDisputed);
                 }
             }
-            TransactionType::Resolve => {
+            TransactionType::Resolve | TransactionType::Chargeback => {
                 if !original_tx.disputed {
-                    return Err(Self::ERROR_TX_NOT_DISPUTED.into());
-                }
-            }
-            TransactionType::Chargeback => {
-                if !original_tx.disputed {
-                    return Err(Self::ERROR_TX_NOT_DISPUTED.into());
+                    return Err(EngineError::TransactionNotDisputed);
                 }
             }
             _ => {}
         }
-        let mut amount = original_tx.amount.ok_or(Self::ERROR_NO_AMOUNT)?;
+        let mut amount = original_tx.amount.ok_or(EngineError::NoAmount)?;
 
         if original_tx.ty == TransactionType::Withdrawal {
             amount = -amount;
@@ -98,14 +108,12 @@ impl Engine {
         Ok(amount)
     }
 
-    fn safe_add(a: &Decimal, b: &Decimal) -> Result<Decimal, Box<dyn std::error::Error>> {
-        a.checked_add(*b)
-            .ok_or(Self::ERROR_ADDITION_OVERFLOW.into())
+    fn safe_add(a: &Decimal, b: &Decimal) -> Result<Decimal, EngineError> {
+        a.checked_add(*b).ok_or(EngineError::AdditionOverflow)
     }
 
-    fn safe_sub(a: &Decimal, b: &Decimal) -> Result<Decimal, Box<dyn std::error::Error>> {
-        a.checked_sub(*b)
-            .ok_or(Self::ERROR_SUBTRACTION_OVERFLOW.into())
+    fn safe_sub(a: &Decimal, b: &Decimal) -> Result<Decimal, EngineError> {
+        a.checked_sub(*b).ok_or(EngineError::SubtractionOverflow)
     }
 
     /// Estimates the memory size of the `Engine` including all its data structures.
@@ -116,14 +124,11 @@ impl Engine {
     /// # Returns
     /// - `usize`: The estimated size in bytes.
     pub fn size_of(&self) -> usize {
-        // DashMap doesn't provide direct access to capacity or size of internal storage:
         let mut size = std::mem::size_of_val(self);
 
-        // Rough estimate for accounts
         size += self.accounts.len()
             * (std::mem::size_of::<ClientId>() + std::mem::size_of::<Account>());
 
-        // Rough estimate for transaction_log
         size += self.transaction_log.len()
             * (std::mem::size_of::<TxId>() + std::mem::size_of::<Transaction>());
 
@@ -155,23 +160,23 @@ impl EngineFunctions for Engine {
     /// - `Err(Box<dyn Error>)`: If the transaction is invalid or if the account is locked.
     ///
     /// # Errors
-    /// - `ERROR_NO_AMOUNT`: If the transaction does not have an amount.
-    /// - `ERROR_DEPOSIT_AMOUNT`: If the transaction amount is not greater than 0.
-    /// - `ERROR_TX_REPEATED`: If the transaction id has already been processed in this session.
-    /// - `ERROR_ACCOUNT_LOCKED`: If the account is already locked.
+    /// - `NoAmount`: If the transaction does not have an amount.
+    /// - `DepositAmountInvalid`: If the transaction amount is not greater than 0.
+    /// - `TransactionRepeated`: If the transaction id has already been processed in this session.
+    /// - `AccountLocked`: If the account is already locked.
     fn process_deposit(&mut self, tx: &Transaction) -> Result<(), Box<dyn Error>> {
-        let amount = tx.amount.ok_or(Self::ERROR_NO_AMOUNT)?;
+        let amount = tx.amount.ok_or(EngineError::NoAmount)?;
         if amount <= Decimal::from(0) {
-            return Err(Self::ERROR_DEPOSIT_AMOUNT.into());
+            return Err(EngineError::DepositAmountInvalid.into());
         }
         if self.transaction_log.contains_key(&tx.tx) {
-            return Err(Self::ERROR_TX_REPEATED.into());
+            return Err(EngineError::TransactionRepeated.into());
         }
 
         let mut account = self.accounts.entry(tx.client).or_default();
 
         if account.locked {
-            return Err(Self::ERROR_ACCOUNT_LOCKED.into());
+            return Err(EngineError::AccountLocked.into());
         }
 
         account.available = Engine::safe_add(&account.available, &amount)?;
@@ -181,69 +186,51 @@ impl EngineFunctions for Engine {
         Ok(())
     }
 
-    /// Process a withdrawal transaction.
-    ///
-    /// # Parameters
-    /// - `tx`: The withdrawal transaction to be processed.
-    ///
-    /// # Returns
-    /// - `Ok(())`: If the transaction is successfully processed.
-    /// - `Err(Box<dyn Error>)`: If the transaction is invalid, if the account is locked,
-    ///   if there are insufficient funds, or if the account is not found.
-    ///
-    /// # Errors
-    /// - `ERROR_NO_AMOUNT`: If the transaction does not have an amount.
-    /// - `ERROR_WITHDRAWAL_AMOUNT`: If the transaction amount is not greater than 0.
-    /// - `ERROR_TX_REPEATED`: If the transaction id has already been processed in this session.
-    /// - `ERROR_ACCOUNT_LOCKED`: If the account is already locked.
-    /// - `ERROR_INSUFFICIENT_FUNDS`: If the account has insufficient available funds.
-    /// - `ERROR_ACCOUNT_NOT_FOUND`: If the account does not exist.
+    // ... Similar adjustments for process_withdrawal, process_dispute, process_resolve, and process_chargeback:
+
     fn process_withdrawal(&mut self, tx: &Transaction) -> Result<(), Box<dyn Error>> {
-        let amount = tx.amount.ok_or(Self::ERROR_NO_AMOUNT)?;
+        let amount = tx.amount.ok_or(EngineError::NoAmount)?;
         if amount <= Decimal::from(0) {
-            return Err(Self::ERROR_WITHDRAWAL_AMOUNT.into());
+            return Err(EngineError::WithdrawalAmountInvalid.into());
         }
         if self.transaction_log.contains_key(&tx.tx) {
-            return Err(Self::ERROR_TX_REPEATED.into());
+            return Err(EngineError::TransactionRepeated.into());
         }
         if let Some(mut account) = self.accounts.get_mut(&tx.client) {
             if account.locked {
-                return Err(Self::ERROR_ACCOUNT_LOCKED.into());
+                return Err(EngineError::AccountLocked.into());
             }
             if account.available >= amount {
                 account.available = Engine::safe_sub(&account.available, &amount)?;
                 account.total = Engine::safe_sub(&account.total, &amount)?;
             } else {
-                return Err(Self::ERROR_INSUFFICIENT_FUNDS.into());
+                return Err(EngineError::InsufficientFunds.into());
             }
         } else {
-            return Err(Self::ERROR_ACCOUNT_NOT_FOUND.into());
+            return Err(EngineError::AccountNotFound.into());
         }
 
         self.transaction_log.insert(tx.tx, tx.clone());
         Ok(())
     }
 
-    /// Processes a dispute transaction by moving the disputed amount from the available balance
-    /// to the held balance and marking the transaction as disputed.
+    /// Process a dispute transaction.
     ///
     /// # Parameters
     /// - `tx`: The dispute transaction to be processed.
     ///
     /// # Returns
-    /// - `Ok(())`: If the dispute is successfully processed.
-    /// - `Err(Box<dyn Error>)`: If the account is locked, if the account or transaction is not found,
-    ///   or if the transaction semantics are invalid.
+    /// - `Ok(())`: If the transaction is successfully processed.
+    /// - `Err(Box<dyn Error>)`: If the transaction is invalid or if the account is locked.
     ///
     /// # Errors
-    /// - `ERROR_ACCOUNT_LOCKED`: If the account is locked.
-    /// - `ERROR_ACCOUNT_NOT_FOUND`: If the account does not exist.
-    /// - `ERROR_TX_NOT_FOUND`: If the original transaction is not found.
-    /// - Additional errors from `check_transaction_semantic` for semantic validation.
+    /// - `TransactionNotFound`: If the transaction id is not found in the transaction log.
+    /// - `AccountNotFound`: If the client id is not found in the accounts map.
+    /// - `AccountLocked`: If the account is already locked.
     fn process_dispute(&mut self, tx: &Transaction) -> Result<(), Box<dyn Error>> {
         if let Some(mut account) = self.accounts.get_mut(&tx.client) {
             if account.locked {
-                return Err(Self::ERROR_ACCOUNT_LOCKED.into());
+                return Err(EngineError::AccountLocked.into());
             }
             if let Some(mut original_tx) = self.transaction_log.get_mut(&tx.tx) {
                 let amount = Engine::check_transaction_semantic(tx, &original_tx)?;
@@ -251,34 +238,31 @@ impl EngineFunctions for Engine {
                 account.held = Engine::safe_add(&account.held, &amount)?;
                 original_tx.disputed = true;
             } else {
-                return Err(Self::ERROR_TX_NOT_FOUND.into());
+                return Err(EngineError::TransactionNotFound.into());
             }
         } else {
-            return Err(Self::ERROR_ACCOUNT_NOT_FOUND.into());
+            return Err(EngineError::AccountNotFound.into());
         }
         Ok(())
     }
 
-    /// Processes a resolve transaction by moving the resolved amount from the held balance
-    /// back to the available balance and marking the transaction as not disputed.
+    /// Process a resolve transaction.
     ///
     /// # Parameters
     /// - `tx`: The resolve transaction to be processed.
     ///
     /// # Returns
-    /// - `Ok(())`: If the resolve is successfully processed.
-    /// - `Err(Box<dyn Error>)`: If the account is locked, if the account or transaction is not found,
-    ///   or if the transaction semantics are invalid.
+    /// - `Ok(())`: If the transaction is successfully processed.
+    /// - `Err(Box<dyn Error>)`: If the transaction is invalid or if the account is locked.
     ///
     /// # Errors
-    /// - `ERROR_ACCOUNT_LOCKED`: If the account is locked.
-    /// - `ERROR_ACCOUNT_NOT_FOUND`: If the account does not exist.
-    /// - `ERROR_TX_NOT_FOUND`: If the original transaction is not found.
-    /// - Additional errors from `check_transaction_semantic` for semantic validation.
+    /// - `TransactionNotFound`: If the transaction id is not found in the transaction log.
+    /// - `AccountNotFound`: If the client id is not found in the accounts map.
+    /// - `AccountLocked`: If the account is already locked.
     fn process_resolve(&mut self, tx: &Transaction) -> Result<(), Box<dyn Error>> {
         if let Some(mut account) = self.accounts.get_mut(&tx.client) {
             if account.locked {
-                return Err(Self::ERROR_ACCOUNT_LOCKED.into());
+                return Err(EngineError::AccountLocked.into());
             }
             if let Some(mut original_tx) = self.transaction_log.get_mut(&tx.tx) {
                 let amount = Engine::check_transaction_semantic(tx, &original_tx)?;
@@ -286,34 +270,31 @@ impl EngineFunctions for Engine {
                 account.held = Engine::safe_sub(&account.held, &amount)?;
                 original_tx.disputed = false;
             } else {
-                return Err(Self::ERROR_TX_NOT_FOUND.into());
+                return Err(EngineError::TransactionNotFound.into());
             }
         } else {
-            return Err(Self::ERROR_ACCOUNT_NOT_FOUND.into());
+            return Err(EngineError::AccountNotFound.into());
         }
         Ok(())
     }
 
-    /// Processes a chargeback transaction by moving the chargeback amount from the held balance
-    /// and locking the account.
+    /// Process a chargeback transaction.
     ///
     /// # Parameters
     /// - `tx`: The chargeback transaction to be processed.
     ///
     /// # Returns
-    /// - `Ok(())`: If the chargeback is successfully processed.
-    /// - `Err(Box<dyn Error>)`: If the account is locked, if the account or transaction is not found,
-    ///   or if the transaction semantics are invalid.
+    /// - `Ok(())`: If the transaction is successfully processed.
+    /// - `Err(Box<dyn Error>)`: If the transaction is invalid or if the account is locked.
     ///
     /// # Errors
-    /// - `ERROR_ACCOUNT_LOCKED`: If the account is locked.
-    /// - `ERROR_ACCOUNT_NOT_FOUND`: If the account does not exist.
-    /// - `ERROR_TX_NOT_FOUND`: If the original transaction is not found.
-    /// - Additional errors from `check_transaction_semantic` for semantic validation.
+    /// - `TransactionNotFound`: If the transaction id is not found in the transaction log.
+    /// - `AccountNotFound`: If the client id is not found in the accounts map.
+    /// - `AccountLocked`: If the account is already locked.
     fn process_chargeback(&mut self, tx: &Transaction) -> Result<(), Box<dyn Error>> {
         if let Some(mut account) = self.accounts.get_mut(&tx.client) {
             if account.locked {
-                return Err(Self::ERROR_ACCOUNT_LOCKED.into());
+                return Err(EngineError::AccountLocked.into());
             }
             if let Some(original_tx) = self.transaction_log.get(&tx.tx) {
                 let amount = Engine::check_transaction_semantic(tx, &original_tx)?;
@@ -321,10 +302,10 @@ impl EngineFunctions for Engine {
                 account.held = Engine::safe_sub(&account.held, &amount)?;
                 account.locked = true;
             } else {
-                return Err(Self::ERROR_TX_NOT_FOUND.into());
+                return Err(EngineError::TransactionNotFound.into());
             }
         } else {
-            return Err(Self::ERROR_ACCOUNT_NOT_FOUND.into());
+            return Err(EngineError::AccountNotFound.into());
         }
 
         Ok(())
@@ -333,6 +314,26 @@ impl EngineFunctions for Engine {
 
 const BATCH_SIZE: usize = 16_384;
 
+/// Reads the given CSV file and processes each transaction with the given engine.
+///
+/// The CSV file is expected to have the following format:
+///
+/// - The first row is expected to be a header row with the columns "client", "tx", "type", and "amount".
+/// - Each row after the header row is expected to represent a transaction, with the columns
+///   "client", "tx", "type", and "amount" representing the client id, transaction id, transaction type,
+///   and amount of the transaction, respectively.
+///
+/// # Errors
+/// - `TransactionProcessingError`: If any errors occur while reading the CSV file or processing the transactions.
+///   The error will contain a list of all errors that occurred.
+/// - `std::io::Error`: If an I/O error occurs while reading the CSV file.
+///
+/// The BATCH_SIZE constant controls how many records are read from the CSV file at a time before being
+/// processed. A larger BATCH_SIZE can improve performance by reducing the number of times the CSV file
+/// needs to be read from disk, but it also increases memory usage. A smaller BATCH_SIZE can reduce memory
+/// usage at the cost of slower performance. The  value is set to 16_384, but it can be expsoed as process
+/// parameter.
+///
 pub fn read_and_process_transactions(
     engine: &mut Engine,
     input_path: &str,

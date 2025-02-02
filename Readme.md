@@ -105,19 +105,19 @@ This project consists of several key components, each responsible for different 
 The system includes comprehensive error handling with specific error messages for various conditions like insufficient funds, account not found, and transaction disputes.
 The system handles the following error conditions:
 
-- **ERROR_DIFFERENT_CLIENT**: If a dispute or resolve is attempted on a transaction from a different client.
-- **ERROR_NO_AMOUNT**: If a transaction does not have an amount.
-- **ERROR_DEPOSIT_AMOUNT**: If the amount of a deposit is not greater than 0.
-- **ERROR_WITHDRAWAL_AMOUNT**: If the amount of a withdrawal is not greater than 0.
-- **ERROR_TX_REPEATED**: If a transaction id already processed in this session - cannot be repeated.
-- **ERROR_INSUFFICIENT_FUNDS**: If a client does not have enough available funds for a withdrawal.
-- **ERROR_ACCOUNT_NOT_FOUND**: If an account is not found for a transaction.
-- **ERROR_TX_NOT_FOUND**: If a transaction is not found for a dispute or resolve operation.
-- **ERROR_ADDITION_OVERFLOW**: If an addition operation would result in an overflow.
-- **ERROR_SUBTRACTION_OVERFLOW**: If a subtraction operation would result in an overflow.
-- **ERROR_ACCOUNT_LOCKED**: If an account is locked.
-- **ERROR_TX_ALREADY_DISPUTED**: If a dispute is attempted on an already disputed transaction.
-- **ERROR_TX_NOT_DISPUTED**: If a resolve or chargeback is attempted on a non-disputed transaction.
+- **EngineError::DifferentClient**: If a dispute or resolve is attempted on a transaction from a different client.
+- **EngineError::NoAmount**: If a transaction does not have an amount.
+- **EngineError::DepositAmountInvalid**: If the amount of a deposit is not greater than 0.
+- **EngineError::WithdrawalAmountInvalid**: If the amount of a withdrawal is not greater than 0.
+- **EngineError::TransactionRepeated**: If a transaction id already processed in this session - cannot be repeated.
+- **EngineError::InsufficientFunds**: If a client does not have enough available funds for a withdrawal.
+- **EngineError::AccountNotFound**: If an account is not found for a transaction.
+- **EngineError::TransactionNotFound**: If a transaction is not found for a dispute or resolve operation.
+- **EngineError::AdditionOverflow**: If an addition operation would result in an overflow.
+- **EngineError::SubtractionOverflow**: If a subtraction operation would result in an overflow.
+- **EngineError::AccountLocked**: If an account is locked.
+- **EngineError::TransactionAlreadyDisputed**: If a dispute is attempted on an already disputed transaction.
+- **EngineError::TransactionNotDisputed**: If a resolve or chargeback is attempted on a non-disputed transaction.
 
 
 #### Memory Efficiency
