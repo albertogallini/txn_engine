@@ -1,5 +1,7 @@
 use crate::datastr::account::Account;
-use crate::datastr::transaction::{ClientId, Transaction, TransactionProcessingError, TransactionType, TxId};
+use crate::datastr::transaction::{
+    ClientId, Transaction, TransactionProcessingError, TransactionType, TxId,
+};
 use std::collections::HashMap;
 use std::error::Error;
 
@@ -23,20 +25,21 @@ pub trait EngineFunctions {
 }
 
 impl Engine {
-    const ERROR_DIFFERENT_CLIENT: &'static str = "Cannot dispute transaction from a different client";
+    const ERROR_DIFFERENT_CLIENT: &'static str =
+        "Cannot dispute transaction from a different client";
     const ERROR_NO_AMOUNT: &'static str = "Transaction must have an amount";
     const ERROR_DEPOSIT_AMOUNT: &'static str = "Deposit amount must be greater than 0";
     const ERROR_WITHDRAWAL_AMOUNT: &'static str = "Withdrawal amount must be greater than 0";
-    const ERROR_TX_REPEATED: &'static str = "Transaction id already processed in this session - cannot be repeated.";
+    const ERROR_TX_REPEATED: &'static str =
+        "Transaction id already processed in this session - cannot be repeated.";
     const ERROR_INSUFFICIENT_FUNDS: &'static str = "Insufficient funds";
     const ERROR_ACCOUNT_NOT_FOUND: &'static str = "Account not found";
     const ERROR_TX_NOT_FOUND: &'static str = "Transaction not found";
     const ERROR_ADDITION_OVERFLOW: &'static str = "Addition overflow";
     const ERROR_SUBTRACTION_OVERFLOW: &'static str = "Subtraction overflow";
     const ERROR_ACCOUNT_LOCKED: &'static str = "Account is locked";
-    const ERROR_TX_ALREADY_DISPUTED: &'static str = "Transaction already disputed"; 
+    const ERROR_TX_ALREADY_DISPUTED: &'static str = "Transaction already disputed";
     const ERROR_TX_NOT_DISPUTED: &'static str = "Transaction not disputed";
-    
 
     pub fn new() -> Self {
         Engine {
@@ -63,11 +66,14 @@ impl Engine {
     /// - `ERROR_TX_NOT_DISPUTED`: If a resolve or chargeback is attempted on a non-disputed transaction.
     /// - `ERROR_NO_AMOUNT`: If the original transaction does not have an amount.
 
-    fn check_transaction_semantic(tx: &Transaction, original_tx: &Transaction) -> Result<Decimal, Box<dyn Error>> {
+    fn check_transaction_semantic(
+        tx: &Transaction,
+        original_tx: &Transaction,
+    ) -> Result<Decimal, Box<dyn Error>> {
         if original_tx.client != tx.client {
             return Err(Self::ERROR_DIFFERENT_CLIENT.into());
         }
-        match tx.ty  {
+        match tx.ty {
             TransactionType::Dispute => {
                 if original_tx.disputed {
                     return Err(Self::ERROR_TX_ALREADY_DISPUTED.into());
@@ -85,28 +91,26 @@ impl Engine {
             }
             _ => {}
         }
-        let mut amount = original_tx
-                    .amount
-                    .ok_or(Self::ERROR_NO_AMOUNT)?;
-        
+        let mut amount = original_tx.amount.ok_or(Self::ERROR_NO_AMOUNT)?;
+
         if original_tx.ty == TransactionType::Withdrawal {
             amount = -amount;
         }
         Ok(amount)
-
     }
 
     fn safe_add(a: &Decimal, b: &Decimal) -> Result<Decimal, Box<dyn std::error::Error>> {
-        a.checked_add(*b).ok_or(Self::ERROR_ADDITION_OVERFLOW.into())
+        a.checked_add(*b)
+            .ok_or(Self::ERROR_ADDITION_OVERFLOW.into())
     }
-    
+
     fn safe_sub(a: &Decimal, b: &Decimal) -> Result<Decimal, Box<dyn std::error::Error>> {
-        a.checked_sub(*b).ok_or(Self::ERROR_SUBTRACTION_OVERFLOW.into())
+        a.checked_sub(*b)
+            .ok_or(Self::ERROR_SUBTRACTION_OVERFLOW.into())
     }
 }
 
 impl EngineFunctions for Engine {
-    
     /// Process a transaction. This function is a dispatch to the correct processing function
     /// for the given transaction type.
     fn process_transaction(&mut self, tx: &Transaction) -> Result<(), Box<dyn Error>> {
@@ -115,11 +119,10 @@ impl EngineFunctions for Engine {
             TransactionType::Withdrawal => self.process_withdrawal(tx)?,
             TransactionType::Dispute => self.process_dispute(tx)?,
             TransactionType::Resolve => self.process_resolve(tx)?,
-            TransactionType::Chargeback => self.process_chargeback(tx)?
+            TransactionType::Chargeback => self.process_chargeback(tx)?,
         }
         Ok(())
     }
-
 
     /// Process a deposit transaction.
     ///
@@ -153,8 +156,8 @@ impl EngineFunctions for Engine {
             return Err(Self::ERROR_ACCOUNT_LOCKED.into());
         }
 
-        account.available =  Engine::safe_add(&account.available,&amount)?;
-        account.total =  Engine::safe_add(&account.total,&amount)?;
+        account.available = Engine::safe_add(&account.available, &amount)?;
+        account.total = Engine::safe_add(&account.total, &amount)?;
 
         self.transaction_log.insert(tx.tx, tx.clone());
         Ok(())
@@ -191,8 +194,8 @@ impl EngineFunctions for Engine {
                 return Err(Self::ERROR_ACCOUNT_LOCKED.into());
             }
             if account.available >= amount {
-                account.available =  Engine::safe_sub(&account.available,&amount)?;
-                account.total =  Engine::safe_sub(&account.total,&amount)?;
+                account.available = Engine::safe_sub(&account.available, &amount)?;
+                account.total = Engine::safe_sub(&account.total, &amount)?;
             } else {
                 return Err(Self::ERROR_INSUFFICIENT_FUNDS.into());
             }
@@ -203,7 +206,7 @@ impl EngineFunctions for Engine {
         self.transaction_log.insert(tx.tx, tx.clone());
         Ok(())
     }
-    
+
     /// Processes a dispute transaction by moving the disputed amount from the available balance
     /// to the held balance and marking the transaction as disputed.
     ///
@@ -227,9 +230,9 @@ impl EngineFunctions for Engine {
                 return Err(Self::ERROR_ACCOUNT_LOCKED.into());
             }
             if let Some(original_tx) = self.transaction_log.get_mut(&tx.tx) {
-                let amount = Engine::check_transaction_semantic(tx,original_tx)?;
-                account.available =  Engine::safe_sub(&account.available,&amount)?;
-                account.held =  Engine::safe_add(&account.held,&amount)?;
+                let amount = Engine::check_transaction_semantic(tx, original_tx)?;
+                account.available = Engine::safe_sub(&account.available, &amount)?;
+                account.held = Engine::safe_add(&account.held, &amount)?;
                 original_tx.disputed = true;
             } else {
                 return Err(Self::ERROR_TX_NOT_FOUND.into());
@@ -263,9 +266,9 @@ impl EngineFunctions for Engine {
                 return Err(Self::ERROR_ACCOUNT_LOCKED.into());
             }
             if let Some(original_tx) = self.transaction_log.get_mut(&tx.tx) {
-                let amount = Engine::check_transaction_semantic(tx,original_tx)?;
-                account.available =  Engine::safe_add(&account.available,&amount)?;
-                account.held =  Engine::safe_sub(&account.held,&amount)?;
+                let amount = Engine::check_transaction_semantic(tx, original_tx)?;
+                account.available = Engine::safe_add(&account.available, &amount)?;
+                account.held = Engine::safe_sub(&account.held, &amount)?;
                 original_tx.disputed = false;
             } else {
                 return Err(Self::ERROR_TX_NOT_FOUND.into());
@@ -299,9 +302,9 @@ impl EngineFunctions for Engine {
                 return Err(Self::ERROR_ACCOUNT_LOCKED.into());
             }
             if let Some(original_tx) = self.transaction_log.get(&tx.tx) {
-                let amount = Engine::check_transaction_semantic(tx,original_tx)?;
-                account.total =  Engine::safe_sub(&account.total,&amount)?;
-                account.held =  Engine::safe_sub(&account.held,&amount)?;
+                let amount = Engine::check_transaction_semantic(tx, original_tx)?;
+                account.total = Engine::safe_sub(&account.total, &amount)?;
+                account.held = Engine::safe_sub(&account.held, &amount)?;
                 account.locked = true;
             } else {
                 return Err(Self::ERROR_TX_NOT_FOUND.into());
@@ -309,21 +312,20 @@ impl EngineFunctions for Engine {
         } else {
             return Err(Self::ERROR_ACCOUNT_NOT_FOUND.into());
         }
-        
+
         Ok(())
     }
 }
 
 const BATCH_SIZE: usize = 16_384;
 
-
-
-
 pub fn read_and_process_transactions(
     engine: &mut Engine,
     input_path: &str,
 ) -> Result<(), TransactionProcessingError> {
-    let file = std::fs::File::open(input_path).map_err(|e| TransactionProcessingError::MultipleErrors(vec![format!("Error opening file: {}", e)]))?;
+    let file = std::fs::File::open(input_path).map_err(|e| {
+        TransactionProcessingError::MultipleErrors(vec![format!("Error opening file: {}", e)])
+    })?;
     let mut reader = BufReader::with_capacity(BATCH_SIZE, file);
 
     let mut csv_reader = ReaderBuilder::new()
@@ -351,10 +353,7 @@ pub fn read_and_process_transactions(
 
         for transaction in records {
             if let Err(e) = engine.process_transaction(&transaction) {
-                errors.push(format!(
-                    "Error processing {:?}: {}",
-                    transaction, e
-                ));
+                errors.push(format!("Error processing {:?}: {}", transaction, e));
             }
         }
     }

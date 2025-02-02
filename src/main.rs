@@ -1,8 +1,6 @@
+use csv::Writer;
 use std::env;
 use txn_engine::engine::{read_and_process_transactions, Engine};
-use csv::Writer;
-
-
 
 /// This program takes a single command line argument, the path to a CSV file
 /// containing transactions. The program processes the transactions and writes
@@ -37,9 +35,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Write account balances to stdout
     let mut writer = Writer::from_writer(std::io::stdout());
     // Write headers
-    writer.write_record(&[
-        "client", "available", "held", "total", "locked"
-    ])?;
+    writer.write_record(&["client", "available", "held", "total", "locked"])?;
     for (client, account) in engine.accounts.iter() {
         writer.write_record(&[
             client.to_string(),

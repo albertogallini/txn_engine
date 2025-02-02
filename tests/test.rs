@@ -1,11 +1,8 @@
-
+use rust_decimal::Decimal;
+use std::str::FromStr;
+use txn_engine::datastr::transaction::TransactionProcessingError;
 use txn_engine::engine::read_and_process_transactions;
 use txn_engine::engine::Engine; // Note the path adjustment if needed
-use rust_decimal::Decimal;
-use txn_engine::datastr::transaction::TransactionProcessingError;
-use std::str::FromStr;
-
-
 
 #[test]
 fn test_basic() {
@@ -19,12 +16,11 @@ fn test_basic() {
     assert_eq!(engine.accounts.len(), 2);
     assert_eq!(engine.accounts[&1].total, Decimal::from_str("10").unwrap());
     assert_eq!(engine.accounts[&2].total, Decimal::from_str("5").unwrap());
-    assert_eq!(engine.accounts[&1].total, engine.accounts[&1].available );
+    assert_eq!(engine.accounts[&1].total, engine.accounts[&1].available);
     assert_eq!(engine.accounts[&2].total, engine.accounts[&2].available);
     assert_eq!(engine.accounts[&1].held, Decimal::from_str("0").unwrap());
     assert_eq!(engine.accounts[&2].held, Decimal::from_str("0").unwrap());
 }
-
 
 #[test]
 fn test_disputed() {
@@ -35,24 +31,26 @@ fn test_disputed() {
         Err(e) => println!(" Some error occurred while processing transactions: {}", e),
     }
     print!("Accounts: {:#?}", engine.accounts);
-    assert_eq!(engine.accounts.len(),6);
+    assert_eq!(engine.accounts.len(), 6);
     assert_eq!(engine.accounts[&3].total, Decimal::from_str("100").unwrap());
     assert_eq!(engine.accounts[&5].total, Decimal::from_str("0").unwrap());
-    assert_eq!(engine.accounts[&4].total, Decimal::from_str("0").unwrap() );
-    
+    assert_eq!(engine.accounts[&4].total, Decimal::from_str("0").unwrap());
+
     assert!(!engine.accounts[&3].locked);
-    assert!(engine.accounts[&5].locked );
-    assert!(engine.accounts[&4].locked );
+    assert!(engine.accounts[&5].locked);
+    assert!(engine.accounts[&4].locked);
 
     assert_eq!(engine.accounts[&10].total, Decimal::from_str("80").unwrap());
     assert_eq!(engine.accounts[&20].total, Decimal::from_str("80").unwrap());
-    assert_eq!(engine.accounts[&30].total, Decimal::from_str("120").unwrap() );
+    assert_eq!(
+        engine.accounts[&30].total,
+        Decimal::from_str("120").unwrap()
+    );
 
     assert_eq!(engine.accounts[&10].held, Decimal::from_str("-20").unwrap());
     assert_eq!(engine.accounts[&20].held, Decimal::from_str("0").unwrap());
-    assert_eq!(engine.accounts[&30].held, Decimal::from_str("20").unwrap() );
+    assert_eq!(engine.accounts[&30].held, Decimal::from_str("20").unwrap());
 }
-
 
 /*
 Tests the handling of erroneous transactions from a CSV file.
@@ -66,7 +64,7 @@ deposit    ,6     ,12   ,5000.0000     # Addition overflowed
 withdrawal ,6     ,13   ,              # Empty amount --> fail
 
 deposit    ,7     ,14   ,              # Empty amount --> fail
-deposit    ,7     ,15   ,10.0              
+deposit    ,7     ,15   ,10.0
 deposit    ,7     ,15   ,10.0          # Duplicate tx
 dispute    ,7     ,16   ,              # Dispute on non-existent or invalid tx
 
@@ -74,9 +72,9 @@ resolve    ,6     ,9999 ,              # Resolve on non-existent tx
 
 chargeback ,7     ,16   ,              # Chargeback on non-existent tx
 
-dispute    ,7     ,15   , 
+dispute    ,7     ,15   ,
 dispute    ,7     ,15   ,              # Transaction already disputed
-chargeback ,7     ,15   , 
+chargeback ,7     ,15   ,
 deposit    ,7     ,17   ,10            # Account is locked
 deposit    ,8     ,18   ,10
 resolve    ,8     ,18   ,              # Transaction not disputed
@@ -111,13 +109,14 @@ fn test_errors() {
             let mut expected_errors_sorted = expected_errors;
             expected_errors_sorted.sort();
 
-            assert_eq!(actual_errors, expected_errors_sorted, "Errors do not match expected errors");
+            assert_eq!(
+                actual_errors, expected_errors_sorted,
+                "Errors do not match expected errors"
+            );
         }
     }
     assert_eq!(engine.accounts.len(), 3);
 }
-
-
 
 #[test]
 fn test_decimal_precision() {
@@ -128,13 +127,17 @@ fn test_decimal_precision() {
         Err(e) => println!("Some error occurred while processing transactions: {}", e),
     }
     println!("Accounts: {:#?}", engine.accounts);
-    
+
     // Check if we have processed transactions for exactly one client
-    assert_eq!(engine.accounts.len(), 1, "Should have processed transactions for one client");
+    assert_eq!(
+        engine.accounts.len(),
+        1,
+        "Should have processed transactions for one client"
+    );
 
     // Check specific account details
     let account = engine.accounts.get(&1).expect("Account 1 should exist");
-    
+
     // Here are assertions for each transaction based on the expected rounding:
     assert_eq!(account.total, Decimal::from_str("7.7129").unwrap());
     assert_eq!(account.available, Decimal::from_str("7.7129").unwrap());
