@@ -35,7 +35,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Write account balances to stdout
     let mut writer = Writer::from_writer(std::io::stdout());
     // Write headers
-    writer.write_record(&["client", "available", "held", "total", "locked"])?;
+    writer.write_record(["client", "available", "held", "total", "locked"])?;
     for (client, account) in engine.accounts.iter() {
         writer.write_record(&[
             client.to_string(),

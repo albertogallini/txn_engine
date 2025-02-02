@@ -67,7 +67,6 @@ impl<'de> Deserialize<'de> for TransactionType {
     /// - `Ok(TransactionType)`: The corresponding `TransactionType` if the string matches
     ///   a known transaction type.
     /// - `Err(D::Error)`: If the string does not match any known transaction type.
-
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: Deserializer<'de>,

@@ -20,7 +20,6 @@ pub struct Account {
 /// # Returns
 /// - `Ok(())`: If the account balances are successfully written.
 /// - `Err(Box<dyn std::error::Error>)`: If there is an error during writing.
-
 pub fn write_account_balances(
     accounts: &HashMap<u16, Account>,
 ) -> Result<(), Box<dyn std::error::Error>> {

@@ -65,7 +65,6 @@ impl Engine {
     /// - `ERROR_TX_ALREADY_DISPUTED`: If a dispute is attempted on an already disputed transaction.
     /// - `ERROR_TX_NOT_DISPUTED`: If a resolve or chargeback is attempted on a non-disputed transaction.
     /// - `ERROR_NO_AMOUNT`: If the original transaction does not have an amount.
-
     fn check_transaction_semantic(
         tx: &Transaction,
         original_tx: &Transaction,
@@ -150,7 +149,7 @@ impl EngineFunctions for Engine {
         let account = self
             .accounts
             .entry(tx.client)
-            .or_insert_with(Account::default);
+            .or_default();
 
         if account.locked {
             return Err(Self::ERROR_ACCOUNT_LOCKED.into());
@@ -180,7 +179,6 @@ impl EngineFunctions for Engine {
     /// - `ERROR_ACCOUNT_LOCKED`: If the account is already locked.
     /// - `ERROR_INSUFFICIENT_FUNDS`: If the account has insufficient available funds.
     /// - `ERROR_ACCOUNT_NOT_FOUND`: If the account does not exist.
-
     fn process_withdrawal(&mut self, tx: &Transaction) -> Result<(), Box<dyn Error>> {
         let amount = tx.amount.ok_or(Self::ERROR_NO_AMOUNT)?;
         if amount <= Decimal::from(0) {
@@ -223,7 +221,6 @@ impl EngineFunctions for Engine {
     /// - `ERROR_ACCOUNT_NOT_FOUND`: If the account does not exist.
     /// - `ERROR_TX_NOT_FOUND`: If the original transaction is not found.
     /// - Additional errors from `check_transaction_semantic` for semantic validation.
-
     fn process_dispute(&mut self, tx: &Transaction) -> Result<(), Box<dyn Error>> {
         if let Some(account) = self.accounts.get_mut(&tx.client) {
             if account.locked {
@@ -259,7 +256,6 @@ impl EngineFunctions for Engine {
     /// - `ERROR_ACCOUNT_NOT_FOUND`: If the account does not exist.
     /// - `ERROR_TX_NOT_FOUND`: If the original transaction is not found.
     /// - Additional errors from `check_transaction_semantic` for semantic validation.
-
     fn process_resolve(&mut self, tx: &Transaction) -> Result<(), Box<dyn Error>> {
         if let Some(account) = self.accounts.get_mut(&tx.client) {
             if account.locked {
@@ -295,7 +291,6 @@ impl EngineFunctions for Engine {
     /// - `ERROR_ACCOUNT_NOT_FOUND`: If the account does not exist.
     /// - `ERROR_TX_NOT_FOUND`: If the original transaction is not found.
     /// - Additional errors from `check_transaction_semantic` for semantic validation.
-
     fn process_chargeback(&mut self, tx: &Transaction) -> Result<(), Box<dyn Error>> {
         if let Some(account) = self.accounts.get_mut(&tx.client) {
             if account.locked {
