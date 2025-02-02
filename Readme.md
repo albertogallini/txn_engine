@@ -119,10 +119,12 @@ The system handles the following error conditions:
 - **ERROR_TX_ALREADY_DISPUTED**: If a dispute is attempted on an already disputed transaction.
 - **ERROR_TX_NOT_DISPUTED**: If a resolve or chargeback is attempted on a non-disputed transaction.
 
-#### Memory Efficiency
 
-The engine is designed to be memory efficient, processing transactions in batches and estimating memory usage to ensure scalability even with large datasets.
-This schema provides an overview of the components and their interactions, offering insight into the architecture and functionality of the transaction engine.
+#### Memory Efficiency
+The engine is designed to be memory efficient, processing transactions in batches (through buffering the input csv stream) and estimating memory usage to ensure scalability even with large datasets.
+
+#### Concurrency Management
+In spite of `main.rs` implementing a single process that reads sequentially from an input CSV stream, the internal `Engine` is designed to support concurrent input transaction streams. Incorporating `DashMap` into the `Engine` struct for managing `accounts` and `transaction_log` provides a concurrent, thread-safe hash map implementation that significantly enhances our system's performance and scalability. <u>By allowing multiple threads to read or write to different entries simultaneously without explicit locking, `DashMap` reduces lock contention: Instead of locking the entire map or individual entries, `DashMap` uses fine-grained locking internally, reducing contention when many threads are accessing different parts of the data map. It improves memory efficiency, and simplifies our codebase, making it easier to manage concurrent operations across potentially thousands of client transactions</u>. This choice supports the goal of creating a high-throughput, low-latency transaction processing system that can scale with demand, all while maintaining code maintainability.
 
 #### Generalizing Disputes:
 - Deposits: When disputing a deposit, you would move the disputed amount from available to held. This keeps the total the same since you're just reallocating the funds.
@@ -159,22 +161,24 @@ The function works as follows:
 
 Note: The `generate_random_transactions` function is not meant to mimic real-world transactions since it generates random transactions without any ordering or dependencies. This results in a higher number of error conditions compared to real-world use cases. But it is good enough to see how the system resources are used increasing the size of the input.
 
-Expected output Mac-Book M3 24 Gb :
+Example of output on Mac-Book M3 24 Gb :
 ```
-Transactions Count, Time           , Process Memory (MB), Engine Memory (MB)
-100               , 394.834µs      , 2.344              , 0.002             
-100100            , 144.666167ms   , 11.375             , 1.842             
-200100            , 275.350375ms   , 7.344              , 3.592             
-300100            , 440.757708ms   , 0.000              , 3.592             
-400100            , 614.448625ms   , 0.000              , 7.092             
-500100            , 773.47625ms    , 0.000              , 7.092             
-600100            , 914.190791ms   , 75.969             , 7.092             
-700100            , 1.034534583s   , 124.891            , 14.092            
-800100            , 1.184750375s   , 84.312             , 14.092            
-900100            , 1.333016375s   , 161.828            , 14.092            
-1000100           , 1.525643583s   , 190.734            , 14.092            
+Transactions Count, Time          , Process Memory (MB), Engine Memory (MB)
+100               , 428.083µs     , 2.094              , 0.001             
+100100            , 173.342542ms  , 26.203             , 0.347             
+200100            , 381.261166ms  , 0.000              , 0.356             
+300100            , 574.925708ms  , 0.000              , 0.357             
+400100            , 766.088583ms  , 0.000              , 0.357             
+500100            , 980.495375ms  , 194.016            , 0.356             
+600100            , 1.155201959s  , 109.203            , 0.357             
+700100            , 1.365203708s  , 0.000              , 0.357             
+800100            , 1.568585208s  , 147.188            , 0.357             
+900100            , 1.785412333s  , 0.000              , 0.357             
+1000100           , 1.940334541s  , 186.625            , 0.357              
          
 ```
-So overall performance of txn_engine, on the aformenthioned assumption, on this machine is `700.000 transactions/s`  with a avg `~5300 transation/Mb` memory impact on the user account/transaction log storage. 
+So overall performance of txn_engine, on the aformenthioned assumption, on this machine is `~500.000 transactions/s`  with a avg `~[2500 - 5000] transation/Mb` memory impact on the user account/transaction log storage.
+
+NOTE: memeory measure are very approximate see `pub fn size_of(&self) -> usize` of `Engine` struct. I did not used that numbers as do not look correct for above performance measure. I used the Process Memory as upperbound. Process Memory is not always reliaable as it depednd on how th OS allocate/deallocate memory for the process and does not reflect directly the real data structures memory usage.
 
 

@@ -156,8 +156,7 @@ fn unit_test_deposit_and_dispute_chargeback() {
         "Held should be 10 after dispute"
     );
     assert_eq!(
-        account.locked,
-        true,
+        account.locked, true,
         "Account must be locked after chargeback"
     );
 }
@@ -291,14 +290,42 @@ fn test_from_csv_file_basic() {
         Ok(()) => println!("Transactions processed successfully"),
         Err(e) => println!(" Some error occurred while processing transactions: {}", e),
     }
-    print!("Accounts: {:#?}", engine.accounts);
-    assert_eq!(engine.accounts.len(), 2);
-    assert_eq!(engine.accounts[&1].total, Decimal::from_str("10").unwrap());
-    assert_eq!(engine.accounts[&2].total, Decimal::from_str("5").unwrap());
-    assert_eq!(engine.accounts[&1].total, engine.accounts[&1].available);
-    assert_eq!(engine.accounts[&2].total, engine.accounts[&2].available);
-    assert_eq!(engine.accounts[&1].held, Decimal::from_str("0").unwrap());
-    assert_eq!(engine.accounts[&2].held, Decimal::from_str("0").unwrap());
+
+    println!("Accounts: {:#?}", engine.accounts);
+
+    assert_eq!(engine.accounts.len(), 2, "Expected two accounts");
+
+    let account1 = engine.accounts.get(&1).expect("Account 1 should exist");
+    assert_eq!(
+        account1.total,
+        Decimal::from_str("10").unwrap(),
+        "Account 1 total should be 10"
+    );
+    assert_eq!(
+        account1.total, account1.available,
+        "Account 1 total should equal available"
+    );
+    assert_eq!(
+        account1.held,
+        Decimal::from_str("0").unwrap(),
+        "Account 1 held should be 0"
+    );
+
+    let account2 = engine.accounts.get(&2).expect("Account 2 should exist");
+    assert_eq!(
+        account2.total,
+        Decimal::from_str("5").unwrap(),
+        "Account 2 total should be 5"
+    );
+    assert_eq!(
+        account2.total, account2.available,
+        "Account 2 total should equal available"
+    );
+    assert_eq!(
+        account2.held,
+        Decimal::from_str("0").unwrap(),
+        "Account 2 held should be 0"
+    );
 }
 
 #[test]
@@ -309,60 +336,103 @@ fn test_from_csv_file_disputed() {
         Ok(()) => println!("Transactions processed successfully"),
         Err(e) => println!(" Some error occurred while processing transactions: {}", e),
     }
-    print!("Accounts: {:#?}", engine.accounts);
-    assert_eq!(engine.accounts.len(), 6);
-    assert_eq!(engine.accounts[&3].total, Decimal::from_str("100").unwrap());
-    assert_eq!(engine.accounts[&5].total, Decimal::from_str("0").unwrap());
-    assert_eq!(engine.accounts[&4].total, Decimal::from_str("0").unwrap());
+    println!("Accounts: {:#?}", engine.accounts);
 
-    assert!(!engine.accounts[&3].locked);
-    assert!(engine.accounts[&5].locked);
-    assert!(engine.accounts[&4].locked);
+    assert_eq!(engine.accounts.len(), 6, "Expected six accounts");
 
-    assert_eq!(engine.accounts[&10].total, Decimal::from_str("80").unwrap());
-    assert_eq!(engine.accounts[&20].total, Decimal::from_str("80").unwrap());
+    let account3 = engine.accounts.get(&3).expect("Account 3 should exist");
     assert_eq!(
-        engine.accounts[&30].total,
-        Decimal::from_str("120").unwrap()
+        account3.total,
+        Decimal::from_str("100").unwrap(),
+        "Account 3 total should be 100"
+    );
+    assert!(!account3.locked, "Account 3 should not be locked");
+
+    let account5 = engine.accounts.get(&5).expect("Account 5 should exist");
+    assert_eq!(
+        account5.total,
+        Decimal::from_str("0").unwrap(),
+        "Account 5 total should be 0"
+    );
+    assert!(account5.locked, "Account 5 should be locked");
+
+    let account4 = engine.accounts.get(&4).expect("Account 4 should exist");
+    assert_eq!(
+        account4.total,
+        Decimal::from_str("0").unwrap(),
+        "Account 4 total should be 0"
+    );
+    assert!(account4.locked, "Account 4 should be locked");
+
+    let account10 = engine.accounts.get(&10).expect("Account 10 should exist");
+    assert_eq!(
+        account10.total,
+        Decimal::from_str("80").unwrap(),
+        "Account 10 total should be 80"
+    );
+    assert_eq!(
+        account10.held,
+        Decimal::from_str("-20").unwrap(),
+        "Account 10 held should be -20"
     );
 
-    assert_eq!(engine.accounts[&10].held, Decimal::from_str("-20").unwrap());
-    assert_eq!(engine.accounts[&20].held, Decimal::from_str("0").unwrap());
-    assert_eq!(engine.accounts[&30].held, Decimal::from_str("20").unwrap());
+    let account20 = engine.accounts.get(&20).expect("Account 20 should exist");
+    assert_eq!(
+        account20.total,
+        Decimal::from_str("80").unwrap(),
+        "Account 20 total should be 80"
+    );
+    assert_eq!(
+        account20.held,
+        Decimal::from_str("0").unwrap(),
+        "Account 20 held should be 0"
+    );
+
+    let account30 = engine.accounts.get(&30).expect("Account 30 should exist");
+    assert_eq!(
+        account30.total,
+        Decimal::from_str("120").unwrap(),
+        "Account 30 total should be 120"
+    );
+    assert_eq!(
+        account30.held,
+        Decimal::from_str("20").unwrap(),
+        "Account 30 held should be 20"
+    );
 }
 
 #[test]
-    ///Tests the handling of erroneous transactions from a CSV file.
+///Tests the handling of erroneous transactions from a CSV file.
 
-    /// type       ,client,tx   ,amount
+/// type       ,client,tx   ,amount
 
-    /// deposit    ,6     ,9    ,0.0000
-    /// withdrawal ,6     ,10   ,-5.0000       # Negative amount, should fail
-    /// deposit    ,6     ,11   ,79228162514264337593543950330  # Large amount
-    /// deposit    ,6     ,12   ,5000.0000     # Addition overflowed
-    /// withdrawal ,6     ,13   ,              # Empty amount --> fail
+/// deposit    ,6     ,9    ,0.0000
+/// withdrawal ,6     ,10   ,-5.0000       # Negative amount, should fail
+/// deposit    ,6     ,11   ,79228162514264337593543950330  # Large amount
+/// deposit    ,6     ,12   ,5000.0000     # Addition overflowed
+/// withdrawal ,6     ,13   ,              # Empty amount --> fail
 
-    /// deposit    ,7     ,14   ,              # Empty amount --> fail
-    /// deposit    ,7     ,15   ,10.0
-    /// deposit    ,7     ,15   ,10.0          # Duplicate tx
-    /// dispute    ,7     ,16   ,              # Dispute on non-existent or invalid tx
+/// deposit    ,7     ,14   ,              # Empty amount --> fail
+/// deposit    ,7     ,15   ,10.0
+/// deposit    ,7     ,15   ,10.0          # Duplicate tx
+/// dispute    ,7     ,16   ,              # Dispute on non-existent or invalid tx
 
-    /// resolve    ,6     ,9999 ,              # Resolve on non-existent tx
+/// resolve    ,6     ,9999 ,              # Resolve on non-existent tx
 
-    /// chargeback ,7     ,16   ,              # Chargeback on non-existent tx
+/// chargeback ,7     ,16   ,              # Chargeback on non-existent tx
 
-    /// dispute    ,7     ,15   ,
-    /// dispute    ,7     ,15   ,              # Transaction already disputed
-    /// chargeback ,7     ,15   ,
-    /// deposit    ,7     ,17   ,10            # Account is locked
-    /// deposit    ,8     ,18   ,10
-    /// resolve    ,8     ,18   ,              # Transaction not disputed
-    ///
-    /// deposit    ,9     ,20  ,100
-    /// withdrawal ,9     ,21  ,200            # Insufficient funds : the transaction does NOT gets into the transaaction log.
-    /// dispute    ,9     ,21  ,               # Dispute on non-existent or invalid tx
-    /// The test checks that the correct errors are reported.
-    /// 
+/// dispute    ,7     ,15   ,
+/// dispute    ,7     ,15   ,              # Transaction already disputed
+/// chargeback ,7     ,15   ,
+/// deposit    ,7     ,17   ,10            # Account is locked
+/// deposit    ,8     ,18   ,10
+/// resolve    ,8     ,18   ,              # Transaction not disputed
+///
+/// deposit    ,9     ,20  ,100
+/// withdrawal ,9     ,21  ,200            # Insufficient funds : the transaction does NOT gets into the transaaction log.
+/// dispute    ,9     ,21  ,               # Dispute on non-existent or invalid tx
+/// The test checks that the correct errors are reported.
+///
 fn test_from_csv_file_error_conditions() {
     let mut engine = Engine::default();
     let input_path = "tests/transactions_errors.csv";

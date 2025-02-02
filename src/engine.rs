@@ -2,7 +2,7 @@ use crate::datastr::account::Account;
 use crate::datastr::transaction::{
     ClientId, Transaction, TransactionProcessingError, TransactionType, TxId,
 };
-use std::collections::HashMap;
+use dashmap::DashMap;
 use std::error::Error;
 
 use csv::ReaderBuilder;
@@ -11,8 +11,8 @@ use std::io::BufReader;
 
 #[derive(Default)]
 pub struct Engine {
-    pub accounts: HashMap<ClientId, Account>,
-    pub transaction_log: HashMap<TxId, Transaction>,
+    pub accounts: DashMap<ClientId, Account>,
+    pub transaction_log: DashMap<TxId, Transaction>,
 }
 
 pub trait EngineFunctions {
@@ -43,8 +43,8 @@ impl Engine {
 
     pub fn new() -> Self {
         Engine {
-            accounts: HashMap::new(),
-            transaction_log: HashMap::new(),
+            accounts: DashMap::new(),
+            transaction_log: DashMap::new(),
         }
     }
 
@@ -116,15 +116,16 @@ impl Engine {
     /// # Returns
     /// - `usize`: The estimated size in bytes.
     pub fn size_of(&self) -> usize {
-        // Size of the Engine struct itself
-        let mut size = size_of_val(self);
+        // DashMap doesn't provide direct access to capacity or size of internal storage:
+        let mut size = std::mem::size_of_val(self);
 
-        // Size of accounts HashMap
-        size += self.accounts.capacity() * (size_of::<ClientId>() + size_of::<Account>());
-        // We're making a rough estimate here. Each HashMap entry might not be fully utilized.
+        // Rough estimate for accounts
+        size += self.accounts.len()
+            * (std::mem::size_of::<ClientId>() + std::mem::size_of::<Account>());
 
-        // Size of transaction_log HashMap
-        size += self.transaction_log.capacity() * (size_of::<TxId>() + size_of::<Transaction>());
+        // Rough estimate for transaction_log
+        size += self.transaction_log.len()
+            * (std::mem::size_of::<TxId>() + std::mem::size_of::<Transaction>());
 
         size
     }
@@ -167,7 +168,7 @@ impl EngineFunctions for Engine {
             return Err(Self::ERROR_TX_REPEATED.into());
         }
 
-        let account = self.accounts.entry(tx.client).or_default();
+        let mut account = self.accounts.entry(tx.client).or_default();
 
         if account.locked {
             return Err(Self::ERROR_ACCOUNT_LOCKED.into());
@@ -205,7 +206,7 @@ impl EngineFunctions for Engine {
         if self.transaction_log.contains_key(&tx.tx) {
             return Err(Self::ERROR_TX_REPEATED.into());
         }
-        if let Some(account) = self.accounts.get_mut(&tx.client) {
+        if let Some(mut account) = self.accounts.get_mut(&tx.client) {
             if account.locked {
                 return Err(Self::ERROR_ACCOUNT_LOCKED.into());
             }
@@ -240,12 +241,12 @@ impl EngineFunctions for Engine {
     /// - `ERROR_TX_NOT_FOUND`: If the original transaction is not found.
     /// - Additional errors from `check_transaction_semantic` for semantic validation.
     fn process_dispute(&mut self, tx: &Transaction) -> Result<(), Box<dyn Error>> {
-        if let Some(account) = self.accounts.get_mut(&tx.client) {
+        if let Some(mut account) = self.accounts.get_mut(&tx.client) {
             if account.locked {
                 return Err(Self::ERROR_ACCOUNT_LOCKED.into());
             }
-            if let Some(original_tx) = self.transaction_log.get_mut(&tx.tx) {
-                let amount = Engine::check_transaction_semantic(tx, original_tx)?;
+            if let Some(mut original_tx) = self.transaction_log.get_mut(&tx.tx) {
+                let amount = Engine::check_transaction_semantic(tx, &original_tx)?;
                 account.available = Engine::safe_sub(&account.available, &amount)?;
                 account.held = Engine::safe_add(&account.held, &amount)?;
                 original_tx.disputed = true;
@@ -275,12 +276,12 @@ impl EngineFunctions for Engine {
     /// - `ERROR_TX_NOT_FOUND`: If the original transaction is not found.
     /// - Additional errors from `check_transaction_semantic` for semantic validation.
     fn process_resolve(&mut self, tx: &Transaction) -> Result<(), Box<dyn Error>> {
-        if let Some(account) = self.accounts.get_mut(&tx.client) {
+        if let Some(mut account) = self.accounts.get_mut(&tx.client) {
             if account.locked {
                 return Err(Self::ERROR_ACCOUNT_LOCKED.into());
             }
-            if let Some(original_tx) = self.transaction_log.get_mut(&tx.tx) {
-                let amount = Engine::check_transaction_semantic(tx, original_tx)?;
+            if let Some(mut original_tx) = self.transaction_log.get_mut(&tx.tx) {
+                let amount = Engine::check_transaction_semantic(tx, &original_tx)?;
                 account.available = Engine::safe_add(&account.available, &amount)?;
                 account.held = Engine::safe_sub(&account.held, &amount)?;
                 original_tx.disputed = false;
@@ -310,12 +311,12 @@ impl EngineFunctions for Engine {
     /// - `ERROR_TX_NOT_FOUND`: If the original transaction is not found.
     /// - Additional errors from `check_transaction_semantic` for semantic validation.
     fn process_chargeback(&mut self, tx: &Transaction) -> Result<(), Box<dyn Error>> {
-        if let Some(account) = self.accounts.get_mut(&tx.client) {
+        if let Some(mut account) = self.accounts.get_mut(&tx.client) {
             if account.locked {
                 return Err(Self::ERROR_ACCOUNT_LOCKED.into());
             }
             if let Some(original_tx) = self.transaction_log.get(&tx.tx) {
-                let amount = Engine::check_transaction_semantic(tx, original_tx)?;
+                let amount = Engine::check_transaction_semantic(tx, &original_tx)?;
                 account.total = Engine::safe_sub(&account.total, &amount)?;
                 account.held = Engine::safe_sub(&account.held, &amount)?;
                 account.locked = true;

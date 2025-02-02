@@ -67,7 +67,7 @@ fn generate_random_transactions(
 fn process_normal(input_path: &str) -> Result<(), Box<dyn std::error::Error>> {
     let mut engine = Engine::default();
     match read_and_process_transactions(&mut engine, input_path) {
-        Ok(()) => println!("Transactions processed successfully"),
+        Ok(()) => {}
         Err(e) => eprintln!(" Some error occurred while processing transactions: {}", e),
     }
     output_results(&engine)
@@ -104,7 +104,9 @@ fn process_stress_test(
 fn output_results(engine: &Engine) -> Result<(), Box<dyn std::error::Error>> {
     let mut writer = Writer::from_writer(std::io::stdout());
     writer.write_record(["client", "available", "held", "total", "locked"])?;
-    for (client, account) in engine.accounts.iter() {
+
+    for r in engine.accounts.iter() {
+        let (client, account) = r.pair();
         writer.write_record(&[
             client.to_string(),
             account.available.to_string(),
