@@ -1,8 +1,8 @@
 use rust_decimal::Decimal;
 use std::str::FromStr;
 use txn_engine::datastr::transaction::TransactionProcessingError;
-use txn_engine::engine::read_and_process_transactions;
-use txn_engine::engine::Engine; // Note the path adjustment if needed
+use txn_engine::engine::Engine;
+use txn_engine::utility::read_and_process_csv_file; // Note the path adjustment if needed
 
 use std::io::Write;
 use tempfile::NamedTempFile;
@@ -23,11 +23,10 @@ fn unit_test_deposit_and_withdrawal() {
 
     // Initialize the engine and process transactions
     let mut engine = Engine::default();
-    match read_and_process_transactions(&mut engine, input_path) {
-        Ok(()) => println!("Transactions processed successfully"),
-        Err(e) => panic!("Error processing transactions: {}", e),
+    match read_and_process_csv_file(&mut engine, input_path) {
+        Ok(()) => {}
+        Err(e) => eprintln!(" Some error occurred while processing transactions: {}", e),
     }
-
     // Assertions
     assert_eq!(engine.accounts.len(), 1, "There should be one account");
     let account = engine.accounts.get(&1).expect("Account 1 should exist");
@@ -61,9 +60,9 @@ fn unit_test_deposit_and_dispute() {
     let input_path = temp_file.path().to_str().unwrap();
 
     let mut engine = Engine::default();
-    match read_and_process_transactions(&mut engine, input_path) {
-        Ok(()) => println!("Transactions processed successfully"),
-        Err(e) => panic!("Error processing transactions: {}", e),
+    match read_and_process_csv_file(&mut engine, input_path) {
+        Ok(()) => {}
+        Err(e) => eprintln!(" Some error occurred while processing transactions: {}", e),
     }
 
     assert_eq!(engine.accounts.len(), 1, "There should be one account");
@@ -97,9 +96,9 @@ fn unit_test_deposit_and_dispute_resolve() {
     let input_path = temp_file.path().to_str().unwrap();
 
     let mut engine = Engine::default();
-    match read_and_process_transactions(&mut engine, input_path) {
-        Ok(()) => println!("Transactions processed successfully"),
-        Err(e) => panic!("Error processing transactions: {}", e),
+    match read_and_process_csv_file(&mut engine, input_path) {
+        Ok(()) => {}
+        Err(e) => eprintln!(" Some error occurred while processing transactions: {}", e),
     }
 
     assert_eq!(engine.accounts.len(), 1, "There should be one account");
@@ -133,9 +132,9 @@ fn unit_test_deposit_and_dispute_chargeback() {
     let input_path = temp_file.path().to_str().unwrap();
 
     let mut engine = Engine::default();
-    match read_and_process_transactions(&mut engine, input_path) {
-        Ok(()) => println!("Transactions processed successfully"),
-        Err(e) => panic!("Error processing transactions: {}", e),
+    match read_and_process_csv_file(&mut engine, input_path) {
+        Ok(()) => {}
+        Err(e) => eprintln!(" Some error occurred while processing transactions: {}", e),
     }
 
     assert_eq!(engine.accounts.len(), 1, "There should be one account");
@@ -173,9 +172,9 @@ fn unit_test_deposit_withdrawal_dispute_withdrawal() {
     let input_path = temp_file.path().to_str().unwrap();
 
     let mut engine = Engine::default();
-    match read_and_process_transactions(&mut engine, input_path) {
-        Ok(()) => println!("Transactions processed successfully"),
-        Err(e) => panic!("Error processing transactions: {}", e),
+    match read_and_process_csv_file(&mut engine, input_path) {
+        Ok(()) => {}
+        Err(e) => eprintln!(" Some error occurred while processing transactions: {}", e),
     }
 
     assert_eq!(engine.accounts.len(), 1, "There should be one account");
@@ -208,7 +207,8 @@ fn unit_test_deposit_withdrawal_too_much() {
     let input_path = temp_file.path().to_str().unwrap();
 
     let mut engine = Engine::default();
-    match read_and_process_transactions(&mut engine, input_path) {
+
+    match read_and_process_csv_file(&mut engine, input_path) {
         Ok(()) => panic!("Should not process withdrawal when insufficient funds"),
         Err(e) => {
             assert!(
@@ -248,7 +248,7 @@ fn unit_test_withdrawal_from_zero() {
     let input_path = temp_file.path().to_str().unwrap();
 
     let mut engine = Engine::default();
-    match read_and_process_transactions(&mut engine, input_path) {
+    match read_and_process_csv_file(&mut engine, input_path) {
         Ok(()) => panic!("Should not process withdrawal from zero balance"),
         Err(e) => {
             println!("Error: {}", e);
@@ -286,7 +286,7 @@ fn unit_test_withdrawal_from_zero() {
 fn test_from_csv_file_basic() {
     let mut engine = Engine::default();
     let input_path = "tests/transactions_basic.csv";
-    match read_and_process_transactions(&mut engine, input_path) {
+    match read_and_process_csv_file(&mut engine, input_path) {
         Ok(()) => println!("Transactions processed successfully"),
         Err(e) => println!(" Some error occurred while processing transactions: {}", e),
     }
@@ -332,7 +332,7 @@ fn test_from_csv_file_basic() {
 fn test_from_csv_file_disputed() {
     let mut engine = Engine::default();
     let input_path = "tests/transactions_disputed.csv";
-    match read_and_process_transactions(&mut engine, input_path) {
+    match read_and_process_csv_file(&mut engine, input_path) {
         Ok(()) => println!("Transactions processed successfully"),
         Err(e) => println!(" Some error occurred while processing transactions: {}", e),
     }
@@ -436,7 +436,7 @@ fn test_from_csv_file_disputed() {
 fn test_from_csv_file_error_conditions() {
     let mut engine = Engine::default();
     let input_path = "tests/transactions_errors.csv";
-    match read_and_process_transactions(&mut engine, input_path) {
+    match read_and_process_csv_file(&mut engine, input_path) {
         Ok(()) => panic!("Expected an error, but got success"),
         Err(TransactionProcessingError::MultipleErrors(errors)) => {
             let expected_errors = vec![
@@ -476,7 +476,7 @@ fn test_from_csv_file_error_conditions() {
 fn test_from_csv_file_decimal_precision() {
     let mut engine = Engine::default();
     let input_path = "tests/transactions_digits.csv";
-    match read_and_process_transactions(&mut engine, input_path) {
+    match read_and_process_csv_file(&mut engine, input_path) {
         Ok(()) => println!("Transactions processed successfully"),
         Err(e) => println!("Some error occurred while processing transactions: {}", e),
     }

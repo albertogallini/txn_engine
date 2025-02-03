@@ -8,7 +8,7 @@ use thiserror::Error;
 
 use csv::ReaderBuilder;
 use rust_decimal::Decimal;
-use std::io::BufReader;
+use std::io::{BufReader, Read};
 
 #[derive(Debug, Error)]
 pub enum EngineError {
@@ -133,6 +133,71 @@ impl Engine {
             * (std::mem::size_of::<TxId>() + std::mem::size_of::<Transaction>());
 
         size
+    }
+
+    /// Reads transactions from a stream in batches and processes them.
+    ///
+    /// This method is designed to handle large inputs by reading in chunks,
+    /// allowing for control over memory usage based on the provided batch size.
+    ///
+    /// # Parameters
+    /// - `stream`: Any type that implements `Read`, providing the transaction data.
+    /// - `batch_size`: The number of transactions to process in each batch.
+    ///
+    /// # Returns
+    /// - `Ok(())` if all transactions are processed without errors.
+    /// - `Err(TransactionProcessingError)` if any errors occur during processing or reading.
+    pub fn read_and_process_transactions<R>(
+        &mut self,
+        stream: R,
+        batch_size: usize,
+    ) -> Result<(), TransactionProcessingError>
+    where
+        R: Read,
+    {
+        let reader = BufReader::with_capacity(batch_size, stream);
+
+        let mut csv_reader = ReaderBuilder::new().has_headers(true).from_reader(reader);
+
+        let mut errors = Vec::new();
+
+        loop {
+            let mut records = Vec::new();
+            for _ in 0..batch_size {
+                match csv_reader.deserialize::<Transaction>().next() {
+                    Some(Ok(record)) => records.push(record),
+                    Some(Err(e)) => {
+                        let error_message = e.to_string();
+                        if let Some(pos) = error_message.find("Unknown transaction type") {
+                            errors.push(format!(
+                                "Error reading transaction record: {}",
+                                &error_message[pos..]
+                            ));
+                        } else {
+                            errors.push(format!("Error reading transaction record: {}", e));
+                        }
+                        continue;
+                    }
+                    None => break,
+                }
+            }
+
+            if records.is_empty() {
+                break;
+            }
+
+            for transaction in records {
+                if let Err(e) = self.process_transaction(&transaction) {
+                    errors.push(format!("Error processing {:?}: {}", transaction, e));
+                }
+            }
+        }
+
+        if !errors.is_empty() {
+            Err(TransactionProcessingError::MultipleErrors(errors))
+        } else {
+            Ok(())
+        }
     }
 }
 
@@ -308,84 +373,6 @@ impl EngineFunctions for Engine {
             return Err(EngineError::AccountNotFound.into());
         }
 
-        Ok(())
-    }
-}
-
-const BATCH_SIZE: usize = 16_384;
-
-/// Reads the given CSV file and processes each transaction with the given engine.
-///
-/// The CSV file is expected to have the following format:
-///
-/// - The first row is expected to be a header row with the columns "client", "tx", "type", and "amount".
-/// - Each row after the header row is expected to represent a transaction, with the columns
-///   "client", "tx", "type", and "amount" representing the client id, transaction id, transaction type,
-///   and amount of the transaction, respectively.
-///
-/// # Errors
-/// - `TransactionProcessingError`: If any errors occur while reading the CSV file or processing the transactions.
-///   The error will contain a list of all errors that occurred.
-/// - `std::io::Error`: If an I/O error occurs while reading the CSV file.
-///
-/// The BATCH_SIZE constant controls how many records are read from the CSV file at a time before being
-/// processed. A larger BATCH_SIZE can improve performance by reducing the number of times the CSV file
-/// needs to be read from disk, but it also increases memory usage. A smaller BATCH_SIZE can reduce memory
-/// usage at the cost of slower performance. The  value is set to 16_384, but it can be expsoed as process
-/// parameter.
-///
-pub fn read_and_process_transactions(
-    engine: &mut Engine,
-    input_path: &str,
-) -> Result<(), TransactionProcessingError> {
-    let file = std::fs::File::open(input_path).map_err(|e| {
-        TransactionProcessingError::MultipleErrors(vec![format!("Error opening file: {}", e)])
-    })?;
-    let mut reader = BufReader::with_capacity(BATCH_SIZE, file);
-
-    let mut csv_reader = ReaderBuilder::new()
-        .has_headers(true)
-        .from_reader(&mut reader);
-
-    let mut errors = Vec::new();
-
-    loop {
-        let mut records = Vec::new();
-        for _ in 0..BATCH_SIZE {
-            match csv_reader.deserialize::<Transaction>().next() {
-                Some(Ok(record)) => records.push(record),
-                Some(Err(e)) => {
-                    let error_message = e.to_string();
-                    // Do not want to print the whole error message, just the part coming from the
-                    // Transaction deserializer, if possible.
-                    if let Some(pos) = error_message.find("Unknown transaction type") {
-                        errors.push(format!(
-                            "Error reading transaction record: {}",
-                            &error_message[pos..]
-                        ));
-                    } else {
-                        errors.push(format!("Error reading transaction record: {}", e));
-                    }
-                    continue;
-                }
-                None => break,
-            }
-        }
-
-        if records.is_empty() {
-            break;
-        }
-
-        for transaction in records {
-            if let Err(e) = engine.process_transaction(&transaction) {
-                errors.push(format!("Error processing {:?}: {}", transaction, e));
-            }
-        }
-    }
-
-    if !errors.is_empty() {
-        Err(TransactionProcessingError::MultipleErrors(errors))
-    } else {
         Ok(())
     }
 }

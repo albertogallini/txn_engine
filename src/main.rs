@@ -1,12 +1,28 @@
-use csv::Writer;
-use rand::{thread_rng, Rng};
 use std::env;
-use std::fs::File;
-use std::io::{BufWriter, Write};
 use std::time::Instant;
-use sysinfo::System;
-use txn_engine::engine::{read_and_process_transactions, Engine};
 
+use csv::Writer;
+use sysinfo::System;
+
+use tempfile::NamedTempFile;
+use txn_engine::engine::Engine;
+use txn_engine::utility::{
+    generate_random_transactions, get_current_memory, read_and_process_csv_file,
+};
+
+/// The main entry point for the command-line interface.
+///
+/// The program can be run in two modes:
+///
+/// 1. Normal mode: `cargo run -- transactions.csv > accounts.csv`
+///    Reads transactions from a CSV file and processes them using the Engine.
+///    Writes the resulting accounts to stdout as CSV.
+///
+/// 2. Stress test mode: `cargo run -- stress-test <number_of_transactions> > accounts.csv`
+///    Generates a specified number of random transactions and processes them using the Engine.
+///    Writes the resulting accounts to stdout as CSV.
+///
+/// The program returns an error if the number of arguments is incorrect.
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<String> = env::args().collect();
     if args.len() < 2 || args.len() > 3 {
@@ -22,11 +38,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             return Err("Stress test requires a number of transactions to generate".into());
         }
         let num_transactions: usize = args[2].parse()?;
-        let temp_file = "temp.csv";
-        generate_random_transactions(num_transactions, temp_file)?;
-        let mut system = System::new_all();
-        let start_memory = get_current_memory(&mut system);
-        process_stress_test(temp_file, start_memory)?;
+        process_stress_test(num_transactions)?;
     } else {
         let input_path = &args[1];
         process_normal(input_path)?;
@@ -35,60 +47,52 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-fn generate_random_transactions(
-    num_transactions: usize,
-    file_path: &str,
-) -> Result<(), Box<dyn std::error::Error>> {
-    let file = File::create(file_path)?;
-    let mut writer = BufWriter::new(file);
-    let mut rng = thread_rng();
-
-    writeln!(writer, "type,client,tx,amount")?;
-    for _ in 0..num_transactions {
-        let ty = match rng.gen_range(0..5) {
-            0 => "deposit",
-            1 => "withdrawal",
-            2 => "dispute",
-            3 => "resolve",
-            _ => "chargeback",
-        };
-        let client = rng.gen_range(1..=1_000);
-        let tx = rng.gen_range(1..=10_000);
-        let amount = if ty == "dispute" || ty == "resolve" || ty == "chargeback" {
-            "".to_string()
-        } else {
-            format!("{:.4}", rng.gen_range(0.0..10_000.0))
-        };
-        writeln!(writer, "{},{},{},{}", ty, client, tx, amount)?;
-    }
-    Ok(())
-}
-
+/// Process transactions from a CSV file and write the resulting accounts to stdout as CSV.
+///
+/// # Errors
+/// - `Box<dyn std::error::Error>` if any errors occur while reading from the file or processing transactions.
 fn process_normal(input_path: &str) -> Result<(), Box<dyn std::error::Error>> {
     let mut engine = Engine::default();
-    match read_and_process_transactions(&mut engine, input_path) {
+    match read_and_process_csv_file(&mut engine, input_path) {
         Ok(()) => {}
         Err(e) => eprintln!(" Some error occurred while processing transactions: {}", e),
     }
     output_results(&engine)
 }
 
-fn process_stress_test(
-    file_path: &str,
-    start_memory: u64,
-) -> Result<(), Box<dyn std::error::Error>> {
+/// Process a specified number of random transactions and print performance metrics.
+///
+/// # Parameters
+/// - `num_transactions`: The number of random transactions to generate and process.
+/// - `start_memory`: The current memory consumption at the start of the stress test.
+///
+/// # Errors
+/// - `Box<dyn std::error::Error>` if any errors occur while generating or processing transactions.
+///
+/// # Notes
+/// - The temporary file is automatically deleted when the function returns.
+/// - The performance metrics are printed to stderr.
+fn process_stress_test(num_transactions: usize) -> Result<(), Box<dyn std::error::Error>> {
     let mut engine = Engine::default();
     let start_time = Instant::now();
-    match read_and_process_transactions(&mut engine, file_path) {
+    let mut system = System::new_all();
+    let start_memory = get_current_memory(&mut system);
+
+    // Use NamedTempFile for automatic cleanup
+    // The temporary file is automatically deleted when temp_file goes out of scope
+    let temp_file = NamedTempFile::new()?;
+    generate_random_transactions(num_transactions, &temp_file)?;
+
+    // Process transactions directly from the temporary file
+    match read_and_process_csv_file(&mut engine, temp_file.path().to_str().unwrap()) {
         Ok(()) => {}
         Err(e) => eprintln!("Error during stress test: {}", e),
     }
 
-    output_results(&engine)?;
-
     {
+        // let's measure the resoruces before creating the dump to properly measure the engine performance:
         let elapsed_time = start_time.elapsed();
-        let memory_delta = get_current_memory(&mut System::new_all()).saturating_sub(start_memory);
+        let memory_delta = get_current_memory(&mut system).saturating_sub(start_memory);
 
         let memory_delta_mb = (memory_delta as f64) / (1024.0 * 1024.0);
         let engine_memory_mb = (engine.size_of() as f64) / (1024.0 * 1024.0);
@@ -97,10 +101,22 @@ fn process_stress_test(
         eprintln!("Memory consumption delta: {:.3} MB", memory_delta_mb);
     }
 
-    std::fs::remove_file(file_path)?;
+    output_results(&engine)?;
+
     Ok(())
 }
 
+/// Writes the final state of all accounts to stdout as a CSV file.
+///
+/// The order of the columns is:
+/// - client: The client ID.
+/// - available: The available balance for the client.
+/// - held: The held balance for the client.
+/// - total: The total balance for the client.
+/// - locked: Whether the account is locked.
+///
+/// # Errors
+/// - `Box<dyn std::error::Error>` if any errors occur while writing to stdout.
 fn output_results(engine: &Engine) -> Result<(), Box<dyn std::error::Error>> {
     let mut writer = Writer::from_writer(std::io::stdout());
     writer.write_record(["client", "available", "held", "total", "locked"])?;
@@ -117,9 +133,4 @@ fn output_results(engine: &Engine) -> Result<(), Box<dyn std::error::Error>> {
     }
     writer.flush()?;
     Ok(())
-}
-
-fn get_current_memory(system: &mut System) -> u64 {
-    system.refresh_all();
-    system.processes().values().map(|p| p.memory()).sum()
 }

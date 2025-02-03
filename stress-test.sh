@@ -38,5 +38,10 @@ for i in $(seq 100 100000 1000100); do
 done
 
 # Print the series from the output file
-echo "Transactions Count, Time, Process Memory (MB), Engine Memory (MB)"
-cat "$output_file"
+
+# Print the series from the output file with aligned columns
+awk 'BEGIN { 
+    printf "%-20s %-20s %-20s %-20s\n", "Transactions Count", "Time", "Process Memory (MB)", "Engine Memory (MB)"
+} { 
+    printf "%-20s %-20s %-20s %-20s\n", $1, $2, $3, $4, $5
+}' "$output_file"

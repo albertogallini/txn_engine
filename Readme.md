@@ -154,8 +154,8 @@ The `generate_random_transactions` function is used by the `stress-test` mode of
 The function works as follows:
 - It opens the output file using the provided path.
 - It writes the header line to the file with the column names.
-- For each transaction, it randomly selects a type (deposit, withdrawal, dispute, resolve, chargeback) and a client ID between 1 and 1000.
-- For deposit and withdrawal transactions, it generates a random amount between 0.0 and 10000.0.
+- For each transaction, it randomly selects a type (deposit, withdrawal, dispute, resolve, chargeback), a client ID between 1 and 1.000.000 and a transaction id between 1 and 10.000.000
+- For deposit and withdrawal transactions, it generates a random amount between 0.0 and 100.0000.0.
 - It writes each transaction line to the file.
 - Then it loops from 100 to 1000100 transactions in steps of 100 and measures the time and memory consumption of the program. The output is written to stress_test_results.txt in the format `Transactions Count, Time, Process Memory (MB), Engine Memory (MB)`.
 
@@ -163,22 +163,29 @@ Note: The `generate_random_transactions` function is not meant to mimic real-wor
 
 Example of output on Mac-Book M3 24 Gb :
 ```
-Transactions Count, Time          , Process Memory (MB), Engine Memory (MB)
-100               , 428.083µs     , 2.094              , 0.001             
-100100            , 173.342542ms  , 26.203             , 0.347             
-200100            , 381.261166ms  , 0.000              , 0.356             
-300100            , 574.925708ms  , 0.000              , 0.357             
-400100            , 766.088583ms  , 0.000              , 0.357             
-500100            , 980.495375ms  , 194.016            , 0.356             
-600100            , 1.155201959s  , 109.203            , 0.357             
-700100            , 1.365203708s  , 0.000              , 0.357             
-800100            , 1.568585208s  , 147.188            , 0.357             
-900100            , 1.785412333s  , 0.000              , 0.357             
-1000100           , 1.940334541s  , 186.625            , 0.357              
+Transactions Count   Time                 Process Memory (MB)  Engine Memory (MB)  
+100                  12.415125ms          0.344                0.001               
+100100               184.069ms            13.000               1.250               
+200100               341.112375ms         16.875               2.505               
+300100               518.024ms            25.141               3.734               
+400100               811.506709ms         24.219               2.314               
+500100               964.680375ms         41.125               3.919               
+600100               1.25693025s          39.625               2.065               
+700100               1.324102583s         39.656               6.174               
+800100               1.528267083s         51.016               7.493               
+900100               1.86784925s          55.781               4.246               
+1000100              2.015164458s         59.672               4.988                      
          
 ```
-So overall performance of txn_engine, on the aformenthioned assumption, on this machine is `~500.000 transactions/s`  with a avg `~[2500 - 5000] transation/Mb` memory impact on the user account/transaction log storage.
+<img src="./img/time_vs_transactions.png" width="500">
+<img src="./img/memory_vs_transactions.png" width="500">
+<img src="./img/memory_vs_transactions_ratios.png" width="500">
 
-NOTE: memeory measure are very approximate see `pub fn size_of(&self) -> usize` of `Engine` struct. I did not used that numbers as do not look correct for above performance measure. I used the Process Memory as upperbound. Process Memory is not always reliaable as it depednd on how th OS allocate/deallocate memory for the process and does not reflect directly the real data structures memory usage.
 
-
+So overall performance of txn_engine, on the aformenthioned assumption, on this machine is `~500.000 transactions/s`  with a avg `~[15.000 (Process Memory) - 150.000 (Engine Memory)] transation/Mb` memory impact on the user account/transaction log storage.
+The plots also show that both time and memory scale as O(n).
+Notes:
+-  read the comment of 'Engine.size_of' function to see how the Engine Memory is computed. The Engine size does not take into account the data structure overhead
+-  the Process Memory takes into account the entire memory space of the process, including the Rust runtime and the I/O and other data structures
+-  the Process Memory is controlled by the runtime and the OS, so it is more volatile
+-  so it is legitimate to have a wide range in the #transaction/MB estimate, but the fact that it is ~constant over time suggests the Engine memory footprint size does not degrade with input size
