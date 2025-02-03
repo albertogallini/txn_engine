@@ -5,6 +5,7 @@ use csv::Writer;
 use sysinfo::System;
 
 use tempfile::NamedTempFile;
+use txn_engine::datastr::account::write_account_balances;
 use txn_engine::engine::Engine;
 use txn_engine::utility::{
     generate_random_transactions, get_current_memory, read_and_process_csv_file,
@@ -108,7 +109,9 @@ fn process_stress_test(num_transactions: usize) -> Result<(), Box<dyn std::error
 
 /// Writes the final state of all accounts to stdout as a CSV file.
 ///
-/// The order of the columns is:
+/// This function leverages `write_account_balances` to handle the writing
+/// of account information in CSV format. It begins by writing the CSV header,
+/// followed by the account data. The order of the columns is:
 /// - client: The client ID.
 /// - available: The available balance for the client.
 /// - held: The held balance for the client.
@@ -120,17 +123,7 @@ fn process_stress_test(num_transactions: usize) -> Result<(), Box<dyn std::error
 fn output_results(engine: &Engine) -> Result<(), Box<dyn std::error::Error>> {
     let mut writer = Writer::from_writer(std::io::stdout());
     writer.write_record(["client", "available", "held", "total", "locked"])?;
+    writer.flush()?; // Ensure the header is written before calling write_account_balances
 
-    for r in engine.accounts.iter() {
-        let (client, account) = r.pair();
-        writer.write_record(&[
-            client.to_string(),
-            account.available.to_string(),
-            account.held.to_string(),
-            account.total.to_string(),
-            account.locked.to_string(),
-        ])?;
-    }
-    writer.flush()?;
-    Ok(())
+    write_account_balances(&engine.accounts)
 }

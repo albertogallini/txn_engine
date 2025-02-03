@@ -4,9 +4,10 @@ use crate::datastr::transaction::{
 };
 use dashmap::DashMap;
 use std::error::Error;
+use std::fs::File;
 use thiserror::Error;
 
-use csv::ReaderBuilder;
+use csv::{ReaderBuilder, Trim};
 use rust_decimal::Decimal;
 use std::io::{BufReader, Read};
 
@@ -40,6 +41,28 @@ pub enum EngineError {
     TransactionAlreadyDisputed,
     #[error("Transaction not disputed")]
     TransactionNotDisputed,
+    #[error("I/O error while reading session")]
+    Io(std::io::Error),
+    #[error("Parsing error while reading session csv")]
+    Csv(csv::Error),
+    #[error("Parsing error while reading session csv - InvalidClientId")]
+    InvalidClientId,
+    #[error("Parsing error while reading session csv - InvalidDecimal")]
+    InvalidDecimal,
+    #[error("Parsing error while reading session csv - InvalidBool")]
+    InvalidBool,
+}
+
+impl From<std::io::Error> for EngineError {
+    fn from(err: std::io::Error) -> Self {
+        EngineError::Io(err)
+    }
+}
+
+impl From<csv::Error> for EngineError {
+    fn from(err: csv::Error) -> Self {
+        EngineError::Csv(err)
+    }
 }
 
 #[derive(Default)]
@@ -206,6 +229,67 @@ impl Engine {
         } else {
             Ok(())
         }
+    }
+
+    /// Loads transactions and accounts from CSV files dumped from a previous session to populate the internal maps.
+    ///
+    /// This method reads from two CSV files: one for transactions and one for accounts.
+    /// The CSV file for accounts includes the client ID as the first field, which is not part
+    /// of the `Account` structure itself but used as a key in `DashMap`.
+    ///
+    /// NOTE: This function is very naive and does perform any semantic/consistency check on the input data
+    ///       so bad or incositent account/transaction_log can be effectevily created.
+    ///       !! - This function is very dangerous and must be used only on verified input files.
+    ///
+    /// # Parameters
+    /// - `transactions_path`: Path to the CSV file containing transactions.
+    /// - `accounts_path`: Path to the CSV file containing account details.
+    ///
+    /// # Returns
+    /// - `Result<(), EngineError>`: Ok if loading was successful, or an error if there were issues with file reading or parsing.
+    pub fn load_from_previous_session_csvs(
+        &mut self,
+        transactions_path: &str,
+        accounts_path: &str,
+    ) -> Result<(), EngineError> {
+        // Load transactions from CSV
+        {
+            let file = File::open(transactions_path).map_err(EngineError::Io)?;
+            let mut rdr = ReaderBuilder::new()
+                .has_headers(true)
+                .trim(Trim::All)
+                .from_reader(BufReader::new(file));
+
+            for result in rdr.deserialize::<Transaction>() {
+                let transaction: Transaction = result.map_err(EngineError::Csv)?;
+                self.transaction_log.insert(transaction.tx, transaction);
+            }
+        }
+
+        // Load accounts from CSV
+        {
+            let file = File::open(accounts_path).map_err(EngineError::Io)?;
+            let mut rdr = ReaderBuilder::new()
+                .has_headers(true)
+                .trim(Trim::All)
+                .from_reader(BufReader::new(file));
+
+            for result in rdr.records() {
+                let record = result.map_err(EngineError::Csv)?;
+                let client_id: u16 = record[0]
+                    .parse()
+                    .map_err(|_| EngineError::InvalidClientId)?;
+                let account = Account {
+                    available: record[1].parse().map_err(|_| EngineError::InvalidDecimal)?,
+                    held: record[2].parse().map_err(|_| EngineError::InvalidDecimal)?,
+                    total: record[3].parse().map_err(|_| EngineError::InvalidDecimal)?,
+                    locked: record[4].parse().map_err(|_| EngineError::InvalidBool)?,
+                };
+                self.accounts.insert(client_id, account);
+            }
+        }
+
+        Ok(())
     }
 }
 

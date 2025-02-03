@@ -1,6 +1,6 @@
 use rust_decimal::Decimal;
 use std::str::FromStr;
-use txn_engine::datastr::transaction::TransactionProcessingError;
+use txn_engine::datastr::transaction::{TransactionProcessingError, TransactionType};
 use txn_engine::engine::Engine;
 use txn_engine::utility::read_and_process_csv_file; // Note the path adjustment if needed
 
@@ -652,4 +652,136 @@ fn test_from_csv_file_decimal_precision() {
     assert_eq!(account.total, Decimal::from_str("7.7129").unwrap());
     assert_eq!(account.available, Decimal::from_str("7.7129").unwrap());
     assert_eq!(account.held, Decimal::from_str("0.0000").unwrap());
+}
+
+#[test]
+fn test_load_from_previous_session_csv() {
+    // Create temporary files for transactions and accounts
+    let mut transactions_file = NamedTempFile::new().expect("Failed to create temporary file");
+    let mut accounts_file = NamedTempFile::new().expect("Failed to create temporary file");
+
+    // Write transaction data
+    transactions_file
+        .write_all(
+            b"type,client,tx,amount\n
+                                        deposit,1,1,10.0000\n
+                                        deposit,2,2,5.0000\n
+                                        withdrawal,1,3,5.0000",
+        )
+        .unwrap();
+
+    // Write account data
+    accounts_file
+        .write_all(
+            b"client,available,held,total,locked\n
+                                   1,5.0000,0.0000,5.0000,false\n
+                                   2,5.0000,0.0000,5.0000,false",
+        )
+        .unwrap();
+
+    // Create an instance of Engine
+    let mut engine = Engine::new();
+
+    // Load data from CSV files
+    engine
+        .load_from_previous_session_csvs(
+            transactions_file.path().to_str().unwrap(),
+            accounts_file.path().to_str().unwrap(),
+        )
+        .expect("Failed to load from CSV");
+
+    // Check if transactions were loaded correctly
+    assert_eq!(engine.transaction_log.len(), 3);
+    let tx1 = engine.transaction_log.get(&1).unwrap();
+    assert_eq!(tx1.ty, TransactionType::Deposit);
+    assert_eq!(tx1.client, 1);
+    assert_eq!(tx1.tx, 1);
+    assert_eq!(tx1.amount, Some(Decimal::new(10_0000, 4))); // 10.0000
+
+    let tx2 = engine.transaction_log.get(&3).unwrap();
+    assert_eq!(tx2.ty, TransactionType::Withdrawal);
+    assert_eq!(tx2.client, 1);
+    assert_eq!(tx2.tx, 3);
+    assert_eq!(tx2.amount, Some(Decimal::new(5_0000, 4))); // 5.0000
+
+    // Check if accounts were loaded correctly
+    assert_eq!(engine.accounts.len(), 2);
+    let account = engine.accounts.get(&1).unwrap();
+    assert_eq!(account.available, Decimal::new(5_0000, 4)); // 5.0000
+    assert_eq!(account.held, Decimal::new(0, 4)); // 0.0000
+    assert_eq!(account.total, Decimal::new(5_0000, 4)); // 5.0000
+    assert!(!account.locked);
+}
+
+/// Tests the handling of subtraction overflow during transaction processing.
+///
+/// This test simulates a scenario where a dispute transaction causes a subtraction
+/// overflow. It creates temporary CSV files for transactions and accounts, loads them
+/// into an `Engine` instance, and then processes a transaction that should trigger
+/// a subtraction overflow error.
+/// This is necessary as the engine cannot generate a status on the Engine such that a
+/// transaction can generate a subtraction overflow. So we need to populate the Engine state
+/// from a "corrupted" input file.
+///
+/// The test expects the `read_and_process_csv_file` function to return an error
+/// indicating a `Subtraction overflow`. If no error occurs or a different error
+/// is returned, the test will fail.
+#[test]
+fn test_subrtaction_overflow() {
+    // Create temporary files for transactions and accounts
+    let mut transactions_file = NamedTempFile::new().expect("Failed to create temporary file");
+    let mut accounts_file = NamedTempFile::new().expect("Failed to create temporary file");
+
+    // Write transaction data
+    transactions_file
+        .write_all(
+            b"type,client,tx,amount\n
+                                        deposit,1,1,10.0000\n
+                                        deposit,2,2,5.0000\n
+                                        deposit,3,3,100.0000\n
+                                        withdrawal,1,4,5.0000",
+        )
+        .unwrap();
+
+    let large_neg_amount = (Decimal::MIN + Decimal::from(1)).to_string();
+    let csv_content = format!(
+        r#"client,available,held,total,locked,\n
+        1,5.0000,0.0000,5.0000,false,\n
+        2,5.0000,0.0000,5.0000,false,\n
+        3,{},{},{},false,\n"#,
+        large_neg_amount, large_neg_amount, large_neg_amount
+    );
+
+    // Write account data
+    write!(accounts_file, "{}", csv_content).unwrap();
+
+    // Create an instance of Engine
+    let mut engine = Engine::new();
+
+    // Load data from CSV files
+    engine
+        .load_from_previous_session_csvs(
+            transactions_file.path().to_str().unwrap(),
+            accounts_file.path().to_str().unwrap(),
+        )
+        .expect("Failed to load from CSV");
+
+    let mut temp_file = NamedTempFile::new().unwrap();
+    let csv_content = format!(
+        r#"type,client,tx,amount,\n
+           dispute,3,3,,\n"#
+    );
+    write!(temp_file, "{}", csv_content).unwrap();
+    let input_path = temp_file.path().to_str().unwrap();
+
+    match read_and_process_csv_file(&mut engine, input_path) {
+        Ok(()) => panic!("read_and_process_csv_file should fail due to overflow"),
+        Err(e) => {
+            println!("{}", e.to_string());
+            assert!(
+                e.to_string().contains("Subtraction overflow"),
+                "Expected `Subtraction overflow` error"
+            );
+        }
+    }
 }

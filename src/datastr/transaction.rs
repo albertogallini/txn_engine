@@ -1,5 +1,8 @@
-use rust_decimal::{Decimal, RoundingStrategy};
-use std::{fmt, str::FromStr};
+use rust_decimal::Decimal;
+use serde::{Deserialize, Deserializer};
+use std::fmt;
+
+use super::deser::{deserialize_amount, deserialize_trimmed_string};
 
 pub type TxId = u32;
 pub type ClientId = u16;
@@ -24,8 +27,6 @@ impl fmt::Display for TransactionType {
         }
     }
 }
-
-use serde::{de, Deserialize, Deserializer};
 
 /*
 
@@ -59,17 +60,6 @@ pub struct Transaction {
     pub disputed: bool,
 }
 
-// Helper function to deserialize and trim strings for any type T that can be FromStr
-fn deserialize_trimmed_string<'de, T, D>(deserializer: D) -> Result<T, D::Error>
-where
-    T: FromStr,
-    T::Err: fmt::Display,
-    D: Deserializer<'de>,
-{
-    let s = String::deserialize(deserializer)?;
-    T::from_str(s.trim()).map_err(de::Error::custom)
-}
-
 impl<'de> Deserialize<'de> for TransactionType {
     /// Deserializes a `TransactionType` from a string representation.
     ///
@@ -96,27 +86,6 @@ impl<'de> Deserialize<'de> for TransactionType {
                 s
             ))),
         }
-    }
-}
-
-/// Deserialize an amount from a CSV string.
-///
-/// If the string is empty, the result is `None`. Otherwise, the amount is parsed
-/// from the string and rounded to four decimal places using the midpoint away
-/// from zero rounding strategy. If parsing fails, an error is returned.
-fn deserialize_amount<'de, D>(deserializer: D) -> Result<Option<Decimal>, D::Error>
-where
-    D: Deserializer<'de>,
-{
-    let s: Option<String> = Option::deserialize(deserializer)?;
-    match s {
-        Some(ref v) if !v.trim().is_empty() => Decimal::from_str(v.trim())
-            .map(|mut d| {
-                d = d.round_dp_with_strategy(4, RoundingStrategy::MidpointAwayFromZero);
-                Some(d)
-            })
-            .map_err(de::Error::custom),
-        _ => Ok(None),
     }
 }
 
