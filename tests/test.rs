@@ -407,6 +407,38 @@ fn unit_test_withdrawal_from_zero() {
 }
 
 #[test]
+fn unit_test_addition_overflow() {
+    let mut temp_file = NamedTempFile::new().unwrap();
+    let large_amount = (Decimal::MAX / Decimal::from(2)).to_string();
+    let csv_content = format!(
+        r#"type,client,tx,amount,\n
+                                deposit,1,1,{},\n
+                                deposit,1,2,{},\n
+                                withdrawal,1,3,{},\n"#,
+        large_amount, large_amount, large_amount
+    );
+
+    write!(temp_file, "{}", csv_content).unwrap();
+    let input_path = temp_file.path().to_str().unwrap();
+
+    let mut engine = Engine::default();
+
+    match read_and_process_csv_file(&mut engine, input_path) {
+        Ok(()) => panic!("read_and_process_csv_file should fail due to overflow"),
+        Err(e) => {
+            println!("{}", e.to_string());
+            assert!(
+                e.to_string().contains("Addition overflow"),
+                "Expected `Addition overflow` error"
+            );
+        }
+    }
+
+    // Assertions about the state after the overflow attempt:
+    assert_eq!(engine.accounts.len(), 1, "There should be one account");
+}
+
+#[test]
 fn test_from_csv_file_basic() {
     let mut engine = Engine::default();
     let input_path = "tests/transactions_basic.csv";
