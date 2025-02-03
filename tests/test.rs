@@ -85,6 +85,47 @@ fn unit_test_deposit_and_dispute() {
 }
 
 #[test]
+fn unit_test_dispute_deposit_after_withdrawal() {
+    let mut temp_file = NamedTempFile::new().unwrap();
+    let csv_content = r#"type,client,tx,amount,\n
+                                deposit,1,1,10.0000,\n
+                                deposit,1,2,20.0000,\n
+                                withdrawal,1,3,20.0000,\n;
+                                dispute,1,2,,\n"#;
+
+    write!(temp_file, "{}", csv_content).unwrap();
+    let input_path = temp_file.path().to_str().unwrap();
+
+    let mut engine = Engine::default();
+    match read_and_process_csv_file(&mut engine, input_path) {
+        Ok(()) => {}
+        Err(e) => eprintln!(" Some error occurred while processing transactions: {}", e),
+    }
+
+    assert_eq!(
+        engine.accounts.len(),
+        1,
+        "Account should exist even if zero balance"
+    );
+    let account = engine.accounts.get(&1).expect("Account 1 should exist");
+    assert_eq!(
+        account.total,
+        Decimal::from_str("10.0000").unwrap(),
+        "Total should be 10 after failed withdrawal attempt"
+    );
+    assert_eq!(
+        account.available,
+        Decimal::from_str("-10.0000").unwrap(),
+        "Available should be -10 after failed withdrawal attempt"
+    );
+    assert_eq!(
+        account.held,
+        Decimal::from_str("20.0000").unwrap(),
+        "Held should be 20"
+    );
+}
+
+#[test]
 fn unit_test_deposit_and_dispute_resolve() {
     let mut temp_file = NamedTempFile::new().unwrap();
     let csv_content = r#"type,client,tx,amount,\n
@@ -209,11 +250,94 @@ fn unit_test_deposit_withdrawal_too_much() {
     let mut engine = Engine::default();
 
     match read_and_process_csv_file(&mut engine, input_path) {
-        Ok(()) => panic!("Should not process withdrawal when insufficient funds"),
+        Ok(()) => panic!("read_and_process_csv_file is expeceted to fail"),
         Err(e) => {
             assert!(
                 e.to_string().contains("Insufficient funds"),
-                "Expected insufficient funds error"
+                "Expected `Insufficient funds` error"
+            );
+        }
+    }
+
+    assert_eq!(engine.accounts.len(), 1, "There should be one account");
+    let account = engine.accounts.get(&1).expect("Account 1 should exist");
+    assert_eq!(
+        account.total,
+        Decimal::from_str("10.0000").unwrap(),
+        "Total should remain 10 after failed withdrawal"
+    );
+    assert_eq!(
+        account.available,
+        Decimal::from_str("10.0000").unwrap(),
+        "Available should remain 10 after failed withdrawal"
+    );
+    assert_eq!(
+        account.held,
+        Decimal::from_str("0.0000").unwrap(),
+        "Held should be 0"
+    );
+}
+#[test]
+fn unit_test_deposit_negative() {
+    let mut temp_file = NamedTempFile::new().unwrap();
+    let csv_content = r#"type,client,tx,amount,\n
+                                deposit,1,1,10.0000,\n
+                                deposit,1,2,-15.0000,\n"#;
+
+    write!(temp_file, "{}", csv_content).unwrap();
+    let input_path = temp_file.path().to_str().unwrap();
+
+    let mut engine = Engine::default();
+
+    match read_and_process_csv_file(&mut engine, input_path) {
+        Ok(()) => panic!("read_and_process_csv_file is expeceted to fail"),
+        Err(e) => {
+            assert!(
+                e.to_string()
+                    .contains("Deposit amount must be greater than 0"),
+                "Expected `Deposit amount must be greater than 0` error."
+            );
+        }
+    }
+
+    assert_eq!(engine.accounts.len(), 1, "There should be one account");
+    let account = engine.accounts.get(&1).expect("Account 1 should exist");
+    assert_eq!(
+        account.total,
+        Decimal::from_str("10.0000").unwrap(),
+        "Total should remain 10 after failed withdrawal"
+    );
+    assert_eq!(
+        account.available,
+        Decimal::from_str("10.0000").unwrap(),
+        "Available should remain 10 after failed withdrawal"
+    );
+    assert_eq!(
+        account.held,
+        Decimal::from_str("0.0000").unwrap(),
+        "Held should be 0"
+    );
+}
+
+#[test]
+fn unit_test_withdrawal_negative() {
+    let mut temp_file = NamedTempFile::new().unwrap();
+    let csv_content = r#"type,client,tx,amount,\n
+                                deposit,1,1,10.0000,\n
+                                withdrawal,1,2,-15.0000,\n"#;
+
+    write!(temp_file, "{}", csv_content).unwrap();
+    let input_path = temp_file.path().to_str().unwrap();
+
+    let mut engine = Engine::default();
+
+    match read_and_process_csv_file(&mut engine, input_path) {
+        Ok(()) => panic!("read_and_process_csv_file is expeceted to fail"),
+        Err(e) => {
+            assert!(
+                e.to_string()
+                    .contains("Withdrawal amount must be greater than 0"),
+                "Expected `Withdrawal amount must be greater than 0` error."
             );
         }
     }
@@ -249,7 +373,7 @@ fn unit_test_withdrawal_from_zero() {
 
     let mut engine = Engine::default();
     match read_and_process_csv_file(&mut engine, input_path) {
-        Ok(()) => panic!("Should not process withdrawal from zero balance"),
+        Ok(()) => panic!("read_and_process_csv_file is expeceted to fail"),
         Err(e) => {
             println!("Error: {}", e);
             assert!(

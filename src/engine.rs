@@ -16,6 +16,8 @@ pub enum EngineError {
     DifferentClient,
     #[error("Transaction must have an amount")]
     NoAmount,
+    #[error("Referred Transaction must have an amount")]
+    ReferredTransactionNoAmount,
     #[error("Deposit amount must be greater than 0")]
     DepositAmountInvalid,
     #[error("Withdrawal amount must be greater than 0")]
@@ -79,7 +81,7 @@ impl Engine {
     /// - `DifferentClient`: If the transactions are from different clients.
     /// - `TransactionAlreadyDisputed`: If a dispute is attempted on an already disputed transaction.
     /// - `TransactionNotDisputed`: If a resolve or chargeback is attempted on a non-disputed transaction.
-    /// - `NoAmount`: If the original transaction does not have an amount.
+    /// - `ReferredTransactionNoAmount`: If the original transaction does not have an amount.
     fn check_transaction_semantic(
         tx: &Transaction,
         original_tx: &Transaction,
@@ -100,7 +102,13 @@ impl Engine {
             }
             _ => {}
         }
-        let mut amount = original_tx.amount.ok_or(EngineError::NoAmount)?;
+        // This error condition should never happen as it is guaranteed only deposits and withdrawals
+        // with valid amount are stored in the transactions_log. But in general the process could read
+        // the content from a previous session from file if the file is corrupted some deposits or
+        // withdrawals without amount could occur.
+        let mut amount = original_tx
+            .amount
+            .ok_or(EngineError::ReferredTransactionNoAmount)?;
 
         if original_tx.ty == TransactionType::Withdrawal {
             amount = -amount;
@@ -251,8 +259,22 @@ impl EngineFunctions for Engine {
         Ok(())
     }
 
-    // ... Similar adjustments for process_withdrawal, process_dispute, process_resolve, and process_chargeback:
-
+    /// Process a withdrawal transaction.
+    ///
+    /// # Parameters
+    /// - `tx`: The withdrawal transaction to be processed.
+    ///
+    /// # Returns
+    /// - `Ok(())`: If the transaction is successfully processed.
+    /// - `Err(Box<dyn Error>)`: If the transaction is invalid or if the account is locked.
+    ///
+    /// # Errors
+    /// - `NoAmount`: If the transaction does not have an amount.
+    /// - `WithdrawalAmountInvalid`: If the transaction amount is not greater than 0.
+    /// - `TransactionRepeated`: If the transaction id has already been processed in this session.
+    /// - `AccountLocked`: If the account is already locked.
+    /// - `InsufficientFunds`: If the account does not have enough available funds.
+    /// - `AccountNotFound`: If the account does not exist.
     fn process_withdrawal(&mut self, tx: &Transaction) -> Result<(), Box<dyn Error>> {
         let amount = tx.amount.ok_or(EngineError::NoAmount)?;
         if amount <= Decimal::from(0) {

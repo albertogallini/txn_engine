@@ -159,7 +159,7 @@ The function works as follows:
 - It writes each transaction line to the file.
 - Then it loops from 100 to 1000100 transactions in steps of 100 and measures the time and memory consumption of the program. The output is written to stress_test_results.txt in the format `Transactions Count, Time, Process Memory (MB), Engine Memory (MB)`.
 
-Note: The `generate_random_transactions` function is not meant to mimic real-world transactions since it generates random transactions without any ordering or dependencies. This results in a higher number of error conditions compared to real-world use cases. But it is good enough to see how the system resources are used increasing the size of the input.
+Note: The `generate_random_transactions` function is not meant to mimic real-world transactions since it generates random transactions without any ordering or dependencies. This results in a <b>higher number of error conditions</b> compared to real-world use cases and as a consequence the number of entry in both the `transaction_log` and `account` maps will be lower than real-world use case. But it is good enough to see how the system resources are used increasing the size of the input.
 
 Example of output on Mac-Book M3 24 Gb :
 ```
@@ -183,9 +183,9 @@ Transactions Count   Time                 Process Memory (MB)  Engine Memory (MB
 
 
 So overall performance of txn_engine, on the aformenthioned assumption, on this machine is `~500.000 transactions/s`  with a avg `~[15.000 (Process Memory) - 150.000 (Engine Memory)] transation/Mb` memory impact on the user account/transaction log storage.
-The plots also show that both time and memory scale as O(n).
-Notes:
+The plots also show that both time and memory scale as O(n).<br><br>
+Comments:
 -  read the comment of 'Engine.size_of' function to see how the Engine Memory is computed. The Engine size does not take into account the data structure overhead
 -  the Process Memory takes into account the entire memory space of the process, including the Rust runtime and the I/O and other data structures
 -  the Process Memory is controlled by the runtime and the OS, so it is more volatile
--  so it is legitimate to have a wide range in the #transaction/MB estimate, but the fact that it is ~constant over time suggests the Engine memory footprint size does not degrade with input size
+-  so it is legitimate to have a wide range for the #transaction/MB estimate, but the fact that it is ~constant over time respect to the process memory footprint suggests the implementation of txn_engine does not degrade with input size
