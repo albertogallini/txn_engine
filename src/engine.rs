@@ -42,7 +42,6 @@ pub enum EngineError {
     TransactionAlreadyDisputed,
     #[error("Transaction not disputed")]
     TransactionNotDisputed,
-   
 }
 
 #[derive(Debug, Error)]
@@ -316,10 +315,18 @@ impl Engine {
                     .parse()
                     .map_err(|_| EngineSerDeserError::InvalidClientId)?;
                 let account = Account {
-                    available: record[1].parse().map_err(|_| EngineSerDeserError::InvalidDecimal)?,
-                    held: record[2].parse().map_err(|_| EngineSerDeserError::InvalidDecimal)?,
-                    total: record[3].parse().map_err(|_| EngineSerDeserError::InvalidDecimal)?,
-                    locked: record[4].parse().map_err(|_| EngineSerDeserError::InvalidBool)?,
+                    available: record[1]
+                        .parse()
+                        .map_err(|_| EngineSerDeserError::InvalidDecimal)?,
+                    held: record[2]
+                        .parse()
+                        .map_err(|_| EngineSerDeserError::InvalidDecimal)?,
+                    total: record[3]
+                        .parse()
+                        .map_err(|_| EngineSerDeserError::InvalidDecimal)?,
+                    locked: record[4]
+                        .parse()
+                        .map_err(|_| EngineSerDeserError::InvalidBool)?,
                 };
                 self.accounts.insert(client_id, account);
             }
@@ -328,7 +335,6 @@ impl Engine {
         Ok(())
     }
 
- 
     /// Dumps the transaction log to a CSV file.
     ///
     /// This function writes the transaction log to the file at the provided path.
@@ -343,7 +349,7 @@ impl Engine {
     /// - `Err(EngineError)` if there is an error writing to the file.
     pub fn dump_transaction_log_to_csvs(
         &self,
-        transactions_path: &str
+        transactions_path: &str,
     ) -> Result<(), EngineSerDeserError> {
         // Dump transactions
         {

@@ -1,7 +1,7 @@
 use csv::Writer;
 use rust_decimal::Decimal;
-use txn_engine::datastr::account::serialize_account_balances_csv;
 use std::str::FromStr;
+use txn_engine::datastr::account::serialize_account_balances_csv;
 use txn_engine::datastr::transaction::{TransactionProcessingError, TransactionType};
 use txn_engine::engine::Engine;
 use txn_engine::utility::read_and_process_csv_file; // Note the path adjustment if needed
@@ -460,7 +460,7 @@ fn unit_test_addition_overflow() {
 /// Net Balance = Sum of Deposits - Sum of Withdrawals
 /// = 7.7134 - 0.0005
 /// = 7.7129
-/// 
+///
 #[test]
 fn unit_test_decimal_precision() {
     let mut temp_file = NamedTempFile::new().unwrap();
@@ -485,7 +485,8 @@ fn unit_test_decimal_precision() {
         Err(e) => {
             println!("Error: {}", e);
             assert!(
-                e.to_string().contains("Withdrawal amount must be greater than 0"),
+                e.to_string()
+                    .contains("Withdrawal amount must be greater than 0"),
                 "Expected `Withdrawal amount must be greater than 0`error"
             );
         }
@@ -499,7 +500,6 @@ fn unit_test_decimal_precision() {
     assert_eq!(account.available, Decimal::from_str("7.7129").unwrap());
     assert_eq!(account.held, Decimal::from_str("0.0000").unwrap());
 }
-
 
 /// Test that transactions are processed correctly from a CSV file.
 ///
@@ -698,7 +698,6 @@ fn test_from_csv_file_error_conditions() {
     assert_eq!(engine.accounts.len(), 4);
 }
 
-
 /// Tests loading transactions and accounts from CSV files into the `Engine`.
 ///
 /// This test creates temporary CSV files for transactions and accounts,
@@ -845,20 +844,19 @@ fn test_subrtaction_overflow() {
     }
 }
 
-
-    /// Tests serialization and deserialization of the `Engine` to and from CSV files.
-    ///
-    /// This test creates a temporary file for transactions and accounts,
-    /// writes predefined data into them, and then loads this data into an
-    /// `Engine` instance using the `load_from_previous_session_csvs` method.
-    ///
-    /// It then dumps the `Engine` state to a temporary file using the
-    /// `dump_transaction_log_to_csvs` method and loads the data from the
-    /// temporary file into another `Engine` instance.
-    ///
-    /// It verifies that the transactions and accounts are correctly loaded by
-    /// asserting the number of entries and checking specific transaction and
-    /// account details.
+/// Tests serialization and deserialization of the `Engine` to and from CSV files.
+///
+/// This test creates a temporary file for transactions and accounts,
+/// writes predefined data into them, and then loads this data into an
+/// `Engine` instance using the `load_from_previous_session_csvs` method.
+///
+/// It then dumps the `Engine` state to a temporary file using the
+/// `dump_transaction_log_to_csvs` method and loads the data from the
+/// temporary file into another `Engine` instance.
+///
+/// It verifies that the transactions and accounts are correctly loaded by
+/// asserting the number of entries and checking specific transaction and
+/// account details.
 #[test]
 fn test_serdesr_engine() {
     let mut engine = Engine::default();
@@ -874,18 +872,18 @@ fn test_serdesr_engine() {
         // Create temporary files for transactions
         let transactions_file = NamedTempFile::new().expect("Failed to create temporary file");
         // Use the temporary files for dumping session data
-        match engine.dump_transaction_log_to_csvs(
-            transactions_file.path().to_str().unwrap()
-        ) {
+        match engine.dump_transaction_log_to_csvs(transactions_file.path().to_str().unwrap()) {
             Ok(()) => {}
             Err(e) => println!("Some error occurred dumping the engine: {}", e),
         }
-        
+
         // Create temporary files for  accounts
         let accounts_file = NamedTempFile::new().expect("Failed to create temporary file");
         let mut writer = Writer::from_writer(&accounts_file);
         // Use the temporary files for dumping session data
-        writer.write_record(["client", "available", "held", "total", "locked"]).unwrap();
+        writer
+            .write_record(["client", "available", "held", "total", "locked"])
+            .unwrap();
         writer.flush().unwrap();
         let _ = serialize_account_balances_csv(&engine.accounts, &accounts_file);
 
