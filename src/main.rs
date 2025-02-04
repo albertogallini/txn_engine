@@ -8,9 +8,7 @@ use sysinfo::System;
 use tempfile::NamedTempFile;
 use txn_engine::datastr::account::serialize_account_balances_csv;
 use txn_engine::engine::Engine;
-use txn_engine::utility::{
-    generate_random_transactions, get_current_memory, read_and_process_csv_file,
-};
+use txn_engine::utility::{generate_random_transactions, get_current_memory};
 
 /// Entry point of the application. Parses command-line arguments to determine the mode of operation
 /// (normal processing or stress testing) and handles transaction processing accordingly.
@@ -68,7 +66,7 @@ fn process_normal(
     input_path: &str,
     should_dump: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    match read_and_process_csv_file(engine, input_path) {
+    match Engine::read_and_process_csv_file(engine, input_path) {
         Ok(()) => {}
         Err(e) => eprintln!("Some error occurred while processing transactions: {}", e),
     }
@@ -111,7 +109,7 @@ fn process_stress_test(num_transactions: usize) -> Result<(), Box<dyn std::error
     generate_random_transactions(num_transactions, &temp_file)?;
 
     // Process transactions directly from the temporary file
-    match read_and_process_csv_file(&mut engine, temp_file.path().to_str().unwrap()) {
+    match Engine::read_and_process_csv_file(&mut engine, temp_file.path().to_str().unwrap()) {
         Ok(()) => {}
         Err(e) => eprintln!("Error during stress test: {}", e),
     }

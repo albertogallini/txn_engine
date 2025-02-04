@@ -1,32 +1,7 @@
-use crate::{datastr::transaction::TransactionProcessingError, engine::Engine};
 use rand::{thread_rng, Rng};
-use std::{fs::File, io::BufReader, process};
+use std::{fs::File, process};
 use sysinfo::{Pid, System};
 use tempfile::NamedTempFile;
-
-/// Reads transactions from a CSV file and processes them.
-///
-/// # Parameters
-/// - `engine`: The Engine instance to process transactions with.
-/// - `input_path`: The path to the CSV file to read transactions from.
-///
-/// # Returns
-/// - `Ok(())` if all transactions are processed without errors.
-/// - `Err(TransactionProcessingError)` if any errors occur during processing or reading.
-pub fn read_and_process_csv_file(
-    engine: &mut Engine,
-    input_path: &str,
-) -> Result<(), TransactionProcessingError> {
-    const BATCH_SIZE: usize = 16_384;
-
-    let file = File::open(input_path).map_err(|e| {
-        TransactionProcessingError::MultipleErrors(vec![format!("Error opening file: {}", e)])
-    })?;
-    let reader = BufReader::new(file);
-
-    // Call the method from the Engine struct
-    engine.read_and_process_transactions(reader, BATCH_SIZE)
-}
 
 /// Generates a specified number of random transactions and writes them to a temporary CSV file.
 ///

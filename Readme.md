@@ -79,39 +79,47 @@ For stress testing suite to measure time and memory conumption:
 The transaction engine processes transactions from CSV input including deposits, withdrawals, disputes, resolutions, and chargebacks. 
 It manages client accounts with available, held, and total balances while supporting batch processing for large datasets to ensure memory efficiency. 
 Safe arithmetic operations prevent overflow errors, and it handles disputes for both deposits and withdrawals, with negative holding for the latter
-Accounts are locked upon chargeback, and the system provides detailed error reporting. It also includes stress testing capabilities by generating random transactions for performance analysis, outputs account statuses to CSV, and leverages Rust's ownership for secure memory management.
+Accounts are locked upon chargeback, and the system provides detailed error reporting. It also includes stress testing capabilities by generating random 
+transactions for performance analysis, outputs account statuses to CSV, and leverages Rust's ownership for secure memory management.
 
 ### Project Structure
 
 This project consists of several key components, each responsible for different aspects of transaction processing. Below is a schema of the main structs and functions and their interactions within the project.
 
-#### Structs
+#### Main Structs
 
-- **Transaction**: Represents a financial transaction. Contains fields such as type, client, transaction ID, and amount.
-- **Account**: Represents a client's account. Manages balances including available, held, and total funds.
-- **Engine**: Core processing unit that handles transactions, manages accounts, and ensures integrity and correctness of operations.
+- **`Transaction`**: Represents a financial transaction. Contains fields such as type, client, transaction ID, and amount.
+- **`Account`**: Represents a client's account. Manages balances including available, held, and total funds.
+- **`Engine`**: Core processing unit that handles transactions, manages accounts, and ensures integrity and correctness of operations.
 
 #### Main.rs Functions
 
-- **main**: Parses arguments, distinguishes between `normal processing` and `stress testing`.
-- **process_normal**: Processes transactions from a provided CSV file and updates account states accordingly.
-- **process_stress_test**: Handles stress testing by processing a large number of generated transactions and measuring performance metrics.
-- **output_results**: Outputs the final state of all accounts to a CSV file after processing is complete.
+- **`main`**: Parses arguments, distinguishes between `normal processing` and `stress testing`.
+- **`process_normal`**: Processes transactions from a provided CSV file and updates account states accordingly.
+- **`process_stress_test`**: Handles stress testing by processing a large number of generated transactions and measuring performance metrics.
+- **`output_results`**: Outputs the final state of all accounts to a CSV file after processing is complete.
 
 #### utility.rs 
-- **generate_random_transactions**: Creates a CSV file with randomly generated transactions for stress testing purposes.
-TODO
 
-#### Key Methods in Engine
+- **`generate_random_transactions`**: Creates a CSV file with randomly generated transactions for stress testing purposes.
+- **`get_current_memory`**:Retrieves the memory usage of the current process.
 
-- **new**: Initializes a new engine instance.
-- **check_transaction_semantic**: Verifies the semantic validity of transactions, ensuring they adhere to business rules.
-- **safe_add / safe_sub**: Performs arithmetic operations safely, preventing overflow errors.
-- **process_transaction**: Dispatches a transaction to the appropriate processing function based on its type.
-- **size_of**: Estimates the memory usage of the engine and its data structures.
-- **read_and_process_transactions**: Reads transactions from a CSV file and dispatches them for processing by the engine.
-- **load_from_previous_session_csvs**: Loads transactions and accounts from CSV files dumped from a previous session to populate the internal maps.
-- **dump_transaction_log_to_csvs**: Dumps the `transaction_log` to a CSV file.
+#### Key Methods in Engine and Complexity Analysis
+
+- **`new`**: Initializes a new engine instance. 
+- **`check_transaction_semantic`**: Verifies the semantic validity of transactions, ensuring they adhere to business rules. <i>**Complexity: `O(1)`**</i>
+- **`safe_add` / `safe_sub`**: Performs arithmetic operations safely, preventing overflow errors. <i>**Complexity: `O(1)`**</i>
+- **`process_transaction`**: Dispatches a transaction to the appropriate processing function based on its type.<i>**Complexity: `O(1)`**</i>
+- **`size_of`**: Estimates the memory usage of the engine and its data structures.<i>**Complexity: `O(1)`**</i>
+- **`read_and_process_csv_file`**: Reads transactions from a CSV file and use the Engine instane passed as input parameter to processes them. It calls `read_and_process_transactions`.
+- **`read_and_process_transactions`**: Reads transactions from a CSV file and dispatches them for processing by the engine.<i>**Complexity: `O(n)`**</i>
+- **`load_from_previous_session_csvs`**: Loads transactions (cardinality n) and accounts (cardinality m) from CSV files dumped from a previous session to populate the internal maps.<i>**Complexity: `O(n+m)`**</i> 
+- **`dump_transaction_log_to_csvs`**: Dumps the `transaction_log` to a CSV file. <i>**Complexity: `O(n)`**</i>
+
+General Notes about Complexity Analysis:
+- The Engine internal state is handled by two DashMaps `accounts` and `transaction_log`. When considering DashMap, operations like insertion, lookup, and removal are generally O(1) in terms of time complexity, thanks to its concurrent hash map implementation. However, under heavy contention or in worst-case scenarios, performance can degrade due to the lock mechanism. See <i>Concurrency Management</i> section.
+- CSV Operations: File I/O operations can introduce variability due to disk I/O, but from an algorithmic standpoint, reading or writing each record is considered O(1) per operation.
+
 
 #### EngineFunctions trait
 
