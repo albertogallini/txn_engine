@@ -26,7 +26,7 @@ This project implements a transaction processing system with the following capab
 - **Memory Efficiency**: Processes transactions using stream buffering to manage memory usage even with large datasets.
 - **Concurrency Management**: Internal transaction engine state (`accouts` and `transactions_log`) are implemented using [`DashMap`](https://docs.rs/dashmap/latest/dashmap/struct.DashMap.html) to handle (potential) concurrent access efficiently
 - **Generalization of Disputes**: Disputes are managed on both `Deposit` and `Withdrawal`.
-- **Engine state decoding from a previus session dump**: The `Engine` struct implementing the transaction engine logic is equipped with `load_from_previous_session_csvs` function to load the internal state (`account` and `transactions_log`) from a previus session dump on csv files.
+- **Engine state encoding/decoding**: The `Engine` struct implementing the transaction engine logic is equipped with `load_from_previous_session_csvs` and `dump_transaction_log_to_csvs` functions encode/decode to/from CSV files the internal state (`account` and `transactions_log`).
 
 ## Getting Started
 
@@ -50,7 +50,7 @@ To process a transactions csv file:
 cargo run --release -- transactions.csv > accounts.csv
 ```
 
-To process a transactions csv file and dump the engine status `accounts` and `transaction_logs`:
+To process a transactions csv file and dump the engine transaction_log:
 
 ```sh
 cargo run --release -- transactions.csv -dump > accounts.csv
@@ -110,6 +110,8 @@ TODO
 - **process_transaction**: Dispatches a transaction to the appropriate processing function based on its type.
 - **size_of**: Estimates the memory usage of the engine and its data structures.
 - **read_and_process_transactions**: Reads transactions from a CSV file and dispatches them for processing by the engine.
+- **load_from_previous_session_csvs**: Loads transactions and accounts from CSV files dumped from a previous session to populate the internal maps.
+- **dump_transaction_log_to_csvs**: Dumps the `transaction_log` to a CSV file.
 
 #### EngineFunctions trait
 
@@ -121,13 +123,12 @@ The EngineFunctions trait provides a set of functions that can be called on the 
 - **resolve**: Resolves a dispute, releasing the `disputed` transaction. Implemented by Engine as a call to `process_transaction` with the `Resolve` transaction type.
 - **chargeback**: Reverses a disputed transaction, effectively removing the associated funds from the client's account and locking the account. Implemented by Engine as a call to `process_transaction` with the `Chargeback` transaction type.
 
-
 #### Error Handling
 
 The system includes comprehensive error handling with specific error messages for various conditions like insufficient funds, account not found, and transaction disputes.
 The system handles the following error conditions:
 
-Semantic errors:<br>
+Semantic errors - error condition on transaction semantic:<br>
 
 - **EngineError::DifferentClient**: If a dispute or resolve is attempted on a transaction from a different client.
 - **EngineError::NoAmount**: If a transaction does not have an amount.
@@ -143,18 +144,18 @@ Semantic errors:<br>
 - **EngineError::TransactionAlreadyDisputed**: If a dispute is attempted on an already disputed transaction.
 - **EngineError::TransactionNotDisputed**: If a resolve or chargeback is attempted on a non-disputed transaction.<br>
 
-I/O Error - deserialization of Engine from a previous session dump<br>
-- **EngineError::Io**: I/O error while reading a previous session dump.
-- **EngineError::Csv**: Parsing error while reading a previous session session csv dump
-- **EngineError::InvalidClientId**: Parsing error while reading a previous session csv -> InvalidClientId
-- **EngineError::InvalidDecimal**: Parsing error while reading a previous session csv -> InvalidDecimal
-- **EngineError::InvalidDecimal**: Parsing error while reading a previous session csv -> InvalidBool
+I/O Error - deserialization of Engine internal state from a previous session dump<br>
+- **EngineSerDeserError::Io**: I/O error while reading a previous session dump.
+- **EngineSerDeserError::Csv**: Parsing error while reading a previous session session csv dump
+- **EngineSerDeserError::InvalidClientId**: Parsing error while reading a previous session csv -> InvalidClientId
+- **EngineSerDeserError::InvalidDecimal**: Parsing error while reading a previous session csv -> InvalidDecimal
+- **EngineSerDeserError::InvalidDecimal**: Parsing error while reading a previous session csv -> InvalidBool
 
 #### Memory Efficiency
-The engine is designed to be memory efficient, processing transactions in batches (through buffering the input csv stream) and estimating memory usage to ensure scalability even with large datasets.
+The engine is designed to be memory efficient, processing transactions through buffering the input csv stream to ensure scalability even with large datasets. See `read_and_process_transactions` in `utility.rs`
 
 #### Concurrency Management
-In spite of `main.rs` implementing a single process that reads sequentially from an input CSV stream, the internal `Engine` is designed to support concurrent input transaction streams. Incorporating `DashMap` into the `Engine` struct for managing `accounts` and `transaction_log` provides a concurrent, thread-safe hash map implementation that significantly enhances our system's performance and scalability. <u>By allowing multiple threads to read or write to different entries simultaneously without explicit locking, `DashMap` reduces lock contention: Instead of locking the entire map or individual entries, `DashMap` uses fine-grained locking internally, reducing contention when many threads are accessing different parts of the data map. It improves memory efficiency, and simplifies our codebase, making it easier to manage concurrent operations across potentially thousands of client transactions</u>. This choice supports the goal of creating a high-throughput, low-latency transaction processing system that can scale with demand, all while maintaining code maintainability.<br>
+In spite of `main.rs` implementing a single process that reads sequentially from an input CSV stream, the internal `Engine` is designed to support concurrent input transaction streams. Incorporating `DashMap` into the `Engine` struct for managing `accounts` and `transaction_log` provides a concurrent, thread-safe hash map implementation that significantly enhances our system's performance and scalability. <u>By allowing multiple threads to read or write to different entries simultaneously without explicit locking, `DashMap` reduces lock contention: Instead of locking the entire map or individual entries, `DashMap` uses fine-grained locking internally (i.e sharded locking'), reducing contention when many threads are accessing different parts of the data map. It improves memory efficiency, and simplifies the codebase, making it easier to manage concurrent operations across potentially thousands of client transactions</u>. This choice supports the goal of creating a high-throughput, low-latency transaction processing system that can scale with demand, all while maintaining code maintainability.<br>
 
 - Benefits of [`DashMap`](https://docs.rs/dashmap/latest/dashmap/struct.DashMap.html):
   - Concurrency:
@@ -189,12 +190,43 @@ In spite of `main.rs` implementing a single process that reads sequentially from
 - It is not possible to dispute multiple times the same transaction. This is prevented by the `disputed` flag in the `Transaction` struct.
 - It is not possible to resolve a non-disputed transaction. Again, this is prevented by the `disputed` flag in the `Transaction` struct.
 
-NOTE on **locked** account: Once an account is locked, no further action is possible. Neither the `Engine` nor `EngineFunctions` expose APIs to unlock the account. The only possible way is to unlock offline (i.e. by manual intervention) on the account storage and load the `txn_engine` from a previous (modified) dump (see the next section).
+NOTE on **locked** account: Once an account is locked, no further actions are possible. Neither the `Engine` nor `EngineFunctions` expose APIs to unlock the account. The only possible way to unlock it is through offline methods (i.e., manual intervention) on the account storage, followed by loading the `txn_engine` from a previously generated and modified dump (see the next section).
 
 Implementation: see `fn check_transaction_semantic` and `impl EngineFunctions for Engine` in `./src/engine.rs`
 
-## Engine state decoding from a previous session dump:
- TODO
+## Engine state encoding/decoding:
+The `-dump` command line parameter will cause the `Engine` to dump the entire content of the internal `transaction log` to CSV file (in addition to the accounts on the standard output). The file will be written in the current working directory.
+
+This is useful for debugging and testing since it allows you to save the state of the engine after running a set of transactions and then load it back up for further testing or verification.
+The `accounts` and `transactions_log` fields are serialized/deserialized using their `serde` implementations.
+The `accounts` field is a `dashmap::DashMap<ClientId, Account>`.
+The `transactions_log` field is a `dashmap::DashMap<TransactionId, Transaction>`.
+The `serde` module is used to serialize/deserialize the `dashmap`s.
+
+Once you have obtained the account dump (returned on the standard output) and the transaction log dump by using the `-dump` cli parameter, it is possible to use those files to decode the Engine internal status.
+This is possible only through internal APIs (see `load_from_previous_session_csvs` Engine function and `test_serdesr_engine` ) and not exposed as a cli parameter. 
+This function is useful to easily test some edge cases that are not possible if the internal state of an `Engine` is built by the `read_and_process_transactions` Engine function that executes all the semantic checks on the 
+transactions. 
+`load_from_previous_session_csvs` is much faster than `read_and_process_transactions` as there is no semantic check. It is a blind decoding of the internal Engine maps dump. For this reason, it 
+is a very dangerous functionality and if used in production (e.g.: to quickly restore an instance of the service without reading the entire transaction history since inception), it must be guaranteed 
+the input files have not been modified after being created by the process. 
+Furthermore, to use such a functionality in a production environment, the dumped files should be equipped with metadata about the creation time and encoder versioning and logic (to handle the ser/deser backward compatibility with further txn_engine releases).
+A possible scenario to use this functionality is to store every day - at the end of the day - the snapshot of account and transaction log. So if the next day a txn_engine has to be restarted it can load from the yesterday snapshot and then reconstruct the 
+correct current status loading just the transactions of the current day. Which is computationally sustainable: see performance analysis in the next section.
+
+- Reasons to use serde:
+  - CSV to Struct: when reading from CSV, you might want to directly convert each row into a Transaction struct.
+  Serde can automatically map CSV fields to struct fields if you use the #[derive(Deserialize)] attribute on your structs.
+
+  - Struct to CSV: when writing back to CSV, Serde can serialize your structs back into CSV format,
+  ensuring that data integrity is maintained without manual string formatting.
+
+  - Consistent Data Handling: using Serde ensures that data is consistently formatted when both reading
+  from and writing to files, which reduces errors in data representation.
+
+  - Extensibility: if you later decide to store or transmit data in a different format
+  (like JSON for API responses, or binary formats for efficiency), Serde can handle these conversions
+  without changing your core data structures. This makes your code more adaptable to changes in data storage or transmission methods
 
 ## Stress Test script & performance measure:
 

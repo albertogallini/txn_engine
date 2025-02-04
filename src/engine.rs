@@ -42,6 +42,11 @@ pub enum EngineError {
     TransactionAlreadyDisputed,
     #[error("Transaction not disputed")]
     TransactionNotDisputed,
+   
+}
+
+#[derive(Debug, Error)]
+pub enum EngineSerDeserError {
     #[error("I/O error while reading session")]
     Io(std::io::Error),
     #[error("Parsing error while reading session csv")]
@@ -54,15 +59,15 @@ pub enum EngineError {
     InvalidBool,
 }
 
-impl From<std::io::Error> for EngineError {
+impl From<std::io::Error> for EngineSerDeserError {
     fn from(err: std::io::Error) -> Self {
-        EngineError::Io(err)
+        EngineSerDeserError::Io(err)
     }
 }
 
-impl From<csv::Error> for EngineError {
+impl From<csv::Error> for EngineSerDeserError {
     fn from(err: csv::Error) -> Self {
-        EngineError::Csv(err)
+        EngineSerDeserError::Csv(err)
     }
 }
 
@@ -140,10 +145,40 @@ impl Engine {
         Ok(amount)
     }
 
+    /// Performs a safe addition of two decimal numbers.
+    ///
+    /// This function is used to add two decimal numbers together without overflowing.
+    /// If the addition would overflow, it returns an error.
+    ///
+    /// # Parameters
+    /// - `a`: The first decimal number to add.
+    /// - `b`: The second decimal number to add.
+    ///
+    /// # Returns
+    /// - `Ok(Decimal)`: The result of the addition if it doesn't overflow.
+    /// - `Err(EngineError)`: An error if the addition overflows.
+    ///
+    /// # Errors
+    /// - `AdditionOverflow`: If the addition overflows.
     fn safe_add(a: &Decimal, b: &Decimal) -> Result<Decimal, EngineError> {
         a.checked_add(*b).ok_or(EngineError::AdditionOverflow)
     }
 
+    /// Performs a safe subtraction of two decimal numbers.
+    ///
+    /// This function is used to subtract two decimal numbers without underflowing.
+    /// If the subtraction would underflow, it returns an error.
+    ///
+    /// # Parameters
+    /// - `a`: The first decimal number to subtract from.
+    /// - `b`: The second decimal number to subtract.
+    ///
+    /// # Returns
+    /// - `Ok(Decimal)`: The result of the subtraction if it doesn't underflow.
+    /// - `Err(EngineError)`: An error if the subtraction underflows.
+    ///
+    /// # Errors
+    /// - `SubtractionOverflow`: If the subtraction underflows.
     fn safe_sub(a: &Decimal, b: &Decimal) -> Result<Decimal, EngineError> {
         a.checked_sub(*b).ok_or(EngineError::SubtractionOverflow)
     }
@@ -167,14 +202,14 @@ impl Engine {
         size
     }
 
-    /// Reads transactions from a stream in batches and processes them.
+    /// Reads transactions from a stream in chunk and processes them.
     ///
     /// This method is designed to handle large inputs by reading in chunks,
     /// allowing for control over memory usage based on the provided batch size.
     ///
     /// # Parameters
     /// - `stream`: Any type that implements `Read`, providing the transaction data.
-    /// - `batch_size`: The number of transactions to process in each batch.
+    /// - `buffer_size`: # of bytes in each chunk.
     ///
     /// # Returns
     /// - `Ok(())` if all transactions are processed without errors.
@@ -182,12 +217,12 @@ impl Engine {
     pub fn read_and_process_transactions<R>(
         &mut self,
         stream: R,
-        batch_size: usize,
+        buffer_size: usize,
     ) -> Result<(), TransactionProcessingError>
     where
         R: Read,
     {
-        let reader = BufReader::with_capacity(batch_size, stream);
+        let reader = BufReader::with_capacity(buffer_size, stream);
 
         let mut csv_reader = ReaderBuilder::new().has_headers(true).from_reader(reader);
 
@@ -195,7 +230,7 @@ impl Engine {
 
         loop {
             let mut records = Vec::new();
-            for _ in 0..batch_size {
+            for _ in 0..buffer_size {
                 match csv_reader.deserialize::<Transaction>().next() {
                     Some(Ok(record)) => records.push(record),
                     Some(Err(e)) => {
@@ -252,39 +287,39 @@ impl Engine {
         &mut self,
         transactions_path: &str,
         accounts_path: &str,
-    ) -> Result<(), EngineError> {
+    ) -> Result<(), EngineSerDeserError> {
         // Load transactions from CSV
         {
-            let file = File::open(transactions_path).map_err(EngineError::Io)?;
+            let file = File::open(transactions_path).map_err(EngineSerDeserError::Io)?;
             let mut rdr = ReaderBuilder::new()
                 .has_headers(true)
                 .trim(Trim::All)
                 .from_reader(BufReader::new(file));
 
             for result in rdr.deserialize::<Transaction>() {
-                let transaction: Transaction = result.map_err(EngineError::Csv)?;
+                let transaction: Transaction = result.map_err(EngineSerDeserError::Csv)?;
                 self.transaction_log.insert(transaction.tx, transaction);
             }
         }
 
         // Load accounts from CSV
         {
-            let file = File::open(accounts_path).map_err(EngineError::Io)?;
+            let file = File::open(accounts_path).map_err(EngineSerDeserError::Io)?;
             let mut rdr = ReaderBuilder::new()
                 .has_headers(true)
                 .trim(Trim::All)
                 .from_reader(BufReader::new(file));
 
             for result in rdr.records() {
-                let record = result.map_err(EngineError::Csv)?;
+                let record = result.map_err(EngineSerDeserError::Csv)?;
                 let client_id: u16 = record[0]
                     .parse()
-                    .map_err(|_| EngineError::InvalidClientId)?;
+                    .map_err(|_| EngineSerDeserError::InvalidClientId)?;
                 let account = Account {
-                    available: record[1].parse().map_err(|_| EngineError::InvalidDecimal)?,
-                    held: record[2].parse().map_err(|_| EngineError::InvalidDecimal)?,
-                    total: record[3].parse().map_err(|_| EngineError::InvalidDecimal)?,
-                    locked: record[4].parse().map_err(|_| EngineError::InvalidBool)?,
+                    available: record[1].parse().map_err(|_| EngineSerDeserError::InvalidDecimal)?,
+                    held: record[2].parse().map_err(|_| EngineSerDeserError::InvalidDecimal)?,
+                    total: record[3].parse().map_err(|_| EngineSerDeserError::InvalidDecimal)?,
+                    locked: record[4].parse().map_err(|_| EngineSerDeserError::InvalidBool)?,
                 };
                 self.accounts.insert(client_id, account);
             }
@@ -309,10 +344,10 @@ impl Engine {
     pub fn dump_transaction_log_to_csvs(
         &self,
         transactions_path: &str
-    ) -> Result<(), EngineError> {
+    ) -> Result<(), EngineSerDeserError> {
         // Dump transactions
         {
-            let file = File::create(transactions_path).map_err(EngineError::Io)?;
+            let file = File::create(transactions_path).map_err(EngineSerDeserError::Io)?;
             let mut writer = Writer::from_writer(&file);
             // Write header for transactions
             writer.write_record(["type", "client", "tx", "amount", "disputed"])?;
