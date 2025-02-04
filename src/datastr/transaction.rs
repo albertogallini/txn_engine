@@ -1,13 +1,16 @@
+use csv::Writer;
+use dashmap::DashMap;
 use rust_decimal::Decimal;
-use serde::{Deserialize, Deserializer};
-use std::fmt;
+use serde::{Deserialize, Deserializer, Serialize};
+use std::{fmt, io::Write};
 
 use super::deser::{deserialize_amount, deserialize_trimmed_string};
 
 pub type TxId = u32;
 pub type ClientId = u16;
 
-#[derive(PartialEq, Debug, Clone)]
+#[derive(PartialEq, Debug, Clone, Serialize)]
+#[serde(rename_all = "lowercase")] // This will convert enum variant names to lowercase for serialization
 pub enum TransactionType {
     Deposit,
     Withdrawal,
@@ -28,48 +31,8 @@ impl fmt::Display for TransactionType {
     }
 }
 
-/*
-
-Reasons to use serde:
-CSV to Struct: when reading from CSV, you might want to directly convert each row into a Transaction struct.
-Serde can automatically map CSV fields to struct fields if you use the #[derive(Deserialize)] attribute on your structs.
-
-Struct to CSV: when writing back to CSV, Serde can serialize your structs back into CSV format,
-ensuring that data integrity is maintained without manual string formatting.
-
-Consistent Data Handling: using Serde ensures that data is consistently formatted when both reading
- from and writing to files, which reduces errors in data representation.
-
-Extensibility: if you later decide to store or transmit data in a different format
-(like JSON for API responses, or binary formats for efficiency), Serde can handle these conversions
-without changing your core data structures. This makes your code more adaptable to changes in data storage or transmission methods.
-
- */
-
-#[derive(Deserialize, Debug, Clone)]
-pub struct Transaction {
-    #[serde(rename = "type")]
-    pub ty: TransactionType,
-    #[serde(deserialize_with = "deserialize_trimmed_string::<u16,_>")]
-    pub client: u16,
-    #[serde(deserialize_with = "deserialize_trimmed_string::<u32,_>")]
-    pub tx: u32,
-    #[serde(deserialize_with = "deserialize_amount")]
-    pub amount: Option<Decimal>,
-    #[serde(default)]
-    pub disputed: bool,
-}
-
+// Custom Deserialize implementation for TransactionType
 impl<'de> Deserialize<'de> for TransactionType {
-    /// Deserializes a `TransactionType` from a string representation.
-    ///
-    /// # Parameters
-    /// - `deserializer`: The deserializer to read the string from.
-    ///
-    /// # Returns
-    /// - `Ok(TransactionType)`: The corresponding `TransactionType` if the string matches
-    ///   a known transaction type.
-    /// - `Err(D::Error)`: If the string does not match any known transaction type.
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: Deserializer<'de>,
@@ -87,6 +50,20 @@ impl<'de> Deserialize<'de> for TransactionType {
             ))),
         }
     }
+}
+
+#[derive(Deserialize, Serialize, Debug, Clone, PartialEq)]
+pub struct Transaction {
+    #[serde(rename = "type")]
+    pub ty: TransactionType,
+    #[serde(deserialize_with = "deserialize_trimmed_string::<u16,_>")]
+    pub client: u16,
+    #[serde(deserialize_with = "deserialize_trimmed_string::<u32,_>")]
+    pub tx: u32,
+    #[serde(deserialize_with = "deserialize_amount")]
+    pub amount: Option<Decimal>,
+    #[serde(default)]
+    pub disputed: bool,
 }
 
 #[derive(Debug)]
@@ -114,4 +91,37 @@ impl fmt::Display for TransactionProcessingError {
             }
         }
     }
+}
+
+/// Writes the transaction log to a CSV file.
+///
+/// The order of the columns is:
+/// - ty: The type of the transaction.
+/// - client: The client ID.
+/// - tx: The transaction ID.
+/// - amount: The amount of the transaction.
+/// - disputed: Whether the transaction is disputed.
+///
+/// # Errors
+/// - `Box<dyn std::error::Error>` if any errors occur while writing to the CSV file.
+pub fn serialize_transcation_log_csv<W: Write>(
+    transaction_log: &DashMap<TxId, Transaction>,
+    writer: W,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let mut csv_writer = Writer::from_writer(writer);
+
+    for entry in transaction_log.iter() {
+        let transaction = entry.value();
+
+        // Write a record to the CSV file
+        csv_writer.serialize((
+            transaction.ty.clone(),
+            transaction.client,
+            transaction.tx,
+            transaction.amount,
+            transaction.disputed,
+        ))?;
+    }
+    csv_writer.flush()?;
+    Ok(())
 }

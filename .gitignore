@@ -1,4 +1,4 @@
 /target
 *.pdf
-output.csv
+*.csv
 stress_test_results*

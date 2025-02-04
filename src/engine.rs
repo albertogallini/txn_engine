@@ -1,13 +1,14 @@
-use crate::datastr::account::Account;
+use crate::datastr::account::{serialize_account_balances_csv, Account};
 use crate::datastr::transaction::{
-    ClientId, Transaction, TransactionProcessingError, TransactionType, TxId,
+    serialize_transcation_log_csv, ClientId, Transaction, TransactionProcessingError,
+    TransactionType, TxId,
 };
 use dashmap::DashMap;
 use std::error::Error;
 use std::fs::File;
 use thiserror::Error;
 
-use csv::{ReaderBuilder, Trim};
+use csv::{ReaderBuilder, Trim, Writer};
 use rust_decimal::Decimal;
 use std::io::{BufReader, Read};
 
@@ -237,9 +238,9 @@ impl Engine {
     /// The CSV file for accounts includes the client ID as the first field, which is not part
     /// of the `Account` structure itself but used as a key in `DashMap`.
     ///
-    /// NOTE: This function is very naive and does perform any semantic/consistency check on the input data
-    ///       so bad or incositent account/transaction_log can be effectevily created.
-    ///       !! - This function is very dangerous and must be used only on verified input files.
+    /// NOTE: This function is very naive and does NOT perform any semantic/consistency check on the input data
+    ///       so bad or inconsistent account/transaction_log can be effectively created.
+    ///       !!  -- This function is very dangerous and must be used only on verified input files.  -- !!
     ///
     /// # Parameters
     /// - `transactions_path`: Path to the CSV file containing transactions.
@@ -287,6 +288,45 @@ impl Engine {
                 };
                 self.accounts.insert(client_id, account);
             }
+        }
+
+        Ok(())
+    }
+
+    /// Dumps the current session's state (accounts and transactions) into CSV files.
+    ///
+    /// This function writes:
+    /// - All transactions to a file specified by `transactions_path`.
+    /// - All accounts to a file specified by `accounts_path`.
+    ///
+    /// # Parameters
+    /// - `transactions_path`: Path where the transaction data will be written.
+    /// - `accounts_path`: Path where the account data will be written.
+    ///
+    /// # Returns
+    /// - `Result<(), EngineError>`: Ok if the dump was successful, or an error if there was an issue with file writing or serialization.
+    pub fn dump_session_to_csvs(
+        &self,
+        transactions_path: &str,
+        accounts_path: &str,
+    ) -> Result<(), EngineError> {
+        // Dump transactions
+        {
+            let file = File::create(transactions_path).map_err(EngineError::Io)?;
+            let mut writer = Writer::from_writer(&file);
+            // Write header for transactions
+            writer.write_record(["type", "client", "tx", "amount", "disputed"])?;
+            writer.flush()?; // Ensure the header is written before calling write_account_balances
+            let _ = serialize_transcation_log_csv(&self.transaction_log, &file);
+        }
+
+        // Dump accounts
+        {
+            let file = File::create(accounts_path).map_err(EngineError::Io)?;
+            let mut writer = Writer::from_writer(&file);
+            writer.write_record(["client", "available", "held", "total", "locked"])?;
+            writer.flush()?; // Ensure the header is written before calling write_account_balances
+            let _ = serialize_account_balances_csv(&self.accounts, &file);
         }
 
         Ok(())

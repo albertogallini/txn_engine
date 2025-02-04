@@ -2,11 +2,12 @@ use csv::Writer;
 use dashmap::DashMap;
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
+use std::io::Write;
 
 use super::deser::{deserialize_amount_r, deserialize_trimmed_string};
 
 // Represents an account
-#[derive(Debug, Default, Clone, Deserialize, Serialize)]
+#[derive(Debug, Default, Clone, Deserialize, Serialize, PartialEq)]
 pub struct Account {
     #[serde(deserialize_with = "deserialize_amount_r")]
     pub available: Decimal,
@@ -18,41 +19,37 @@ pub struct Account {
     pub locked: bool,
 }
 
-/// Writes the account balances to the standard output in CSV format using DashMap.
+/// Writes the final state of all accounts to stdout as a CSV file.
 ///
-/// This function uses deserialization methods for formatting output, ensuring
-/// consistency in how data is presented. It iterates directly over the `DashMap`
-/// without cloning the accounts, for low memory usage.
+/// This function is used at the end of the `txn_engine` to output the final state of all accounts to stdout.
+/// The order of the columns is:
+/// - client: The client ID.
+/// - available: The available balance for the client.
+/// - held: The held balance for the client.
+/// - total: The total balance for the client.
+/// - locked: Whether the account is locked.
 ///
-/// # Parameters
-/// - `accounts`: A reference to a `DashMap` where the key is a `u16` representing the client ID,
-///   and the value is an `Account` containing the balance details.
-///
-/// # Returns
-/// - `Ok(())`: If the account balances are successfully written.
-/// - `Err(Box<dyn std::error::Error>)`: If there is an error during writing.
-pub fn write_account_balances(
+/// # Errors
+/// - `Box<dyn std::error::Error>` if any errors occur while writing to stdout.
+pub fn serialize_account_balances_csv<W: Write>(
     accounts: &DashMap<u16, Account>,
+    writer: W,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let mut writer = Writer::from_writer(std::io::stdout());
+    let mut csv_writer = Writer::from_writer(writer);
 
-    for r in accounts.iter() {
-        let (client, account) = r.pair();
-        // Use deserialization methods indirectly for formatting
-        let available_str = format!("{}", account.available);
-        let held_str = format!("{}", account.held);
-        let total_str = format!("{}", account.total);
-        let locked_str = if account.locked { "true" } else { "false" };
+    for entry in accounts.iter() {
+        let client_id = *entry.key();
+        let account = entry.value();
 
-        writer.write_record(&[
-            client.to_string(),
-            available_str,
-            held_str,
-            total_str,
-            locked_str.to_owned(),
-        ])?;
+        // Write a record to the CSV file
+        csv_writer.serialize((
+            client_id,
+            account.available,
+            account.held,
+            account.total,
+            account.locked,
+        ))?;
     }
-
-    writer.flush()?;
+    csv_writer.flush()?;
     Ok(())
 }

@@ -9,19 +9,14 @@ use tempfile::NamedTempFile;
 
 #[test]
 fn unit_test_deposit_and_withdrawal() {
-    // Create a temporary CSV file
     let mut temp_file = NamedTempFile::new().unwrap();
     let csv_content = r#"type,client,tx,amount,\n
                                 deposit,1, 1, 10.0000,\n
                                 withdrawal, 1, 2, 5.0000,\n"#;
 
-    // Write content to the temporary file
     write!(temp_file, "{}", csv_content).unwrap();
-
-    // Get the path of the temporary file
     let input_path = temp_file.path().to_str().unwrap();
 
-    // Initialize the engine and process transactions
     let mut engine = Engine::default();
     match read_and_process_csv_file(&mut engine, input_path) {
         Ok(()) => {}
@@ -438,6 +433,11 @@ fn unit_test_addition_overflow() {
     assert_eq!(engine.accounts.len(), 1, "There should be one account");
 }
 
+/// Test that transactions are processed correctly from a CSV file.
+///
+/// The CSV file `tests/transactions_basic.csv` contains three deposits and two withdrawal.
+/// After processing, the Engine should have two accounts with the correct total and available funds.
+///
 #[test]
 fn test_from_csv_file_basic() {
     let mut engine = Engine::default();
@@ -484,6 +484,9 @@ fn test_from_csv_file_basic() {
     );
 }
 
+/// Tests the processing of transactions from a CSV file, specifically focusing on the dispute
+/// and chargeback transactions. This test checks that the accounts are correctly updated
+/// after the dispute and chargeback transactions are processed.
 #[test]
 fn test_from_csv_file_disputed() {
     let mut engine = Engine::default();
@@ -492,7 +495,6 @@ fn test_from_csv_file_disputed() {
         Ok(()) => println!("Transactions processed successfully"),
         Err(e) => println!(" Some error occurred while processing transactions: {}", e),
     }
-    println!("Accounts: {:#?}", engine.accounts);
 
     assert_eq!(engine.accounts.len(), 6, "Expected six accounts");
 
@@ -558,7 +560,7 @@ fn test_from_csv_file_disputed() {
 }
 
 #[test]
-///Tests the handling of erroneous transactions from a CSV file.
+///Tests the handling of several erroneous transactions from a CSV file.
 
 /// type       ,client,tx   ,amount
 
@@ -628,6 +630,11 @@ fn test_from_csv_file_error_conditions() {
     assert_eq!(engine.accounts.len(), 4);
 }
 
+/// Test that transactions with decimal amounts are processed correctly, including
+/// rounding at the right precision.
+///
+/// The test checks that the total and available amounts are correct, and that
+/// there are no held funds.
 #[test]
 fn test_from_csv_file_decimal_precision() {
     let mut engine = Engine::default();
@@ -636,7 +643,6 @@ fn test_from_csv_file_decimal_precision() {
         Ok(()) => println!("Transactions processed successfully"),
         Err(e) => println!("Some error occurred while processing transactions: {}", e),
     }
-    println!("Accounts: {:#?}", engine.accounts);
 
     // Check if we have processed transactions for exactly one client
     assert_eq!(
@@ -653,6 +659,20 @@ fn test_from_csv_file_decimal_precision() {
     assert_eq!(account.available, Decimal::from_str("7.7129").unwrap());
     assert_eq!(account.held, Decimal::from_str("0.0000").unwrap());
 }
+
+/// Tests loading transactions and accounts from CSV files into the `Engine`.
+///
+/// This test creates temporary CSV files for transactions and accounts,
+/// writes predefined data into them, and then loads this data into an
+/// `Engine` instance using the `load_from_previous_session_csvs` method.
+///
+/// It verifies that the transactions and accounts are correctly loaded by
+/// asserting the number of entries and checking specific transaction and
+/// account details.
+///
+/// The test expects that:
+/// - The transaction log contains three transactions with correct details.
+/// - The accounts map contains two accounts with expected balances and states.
 
 #[test]
 fn test_load_from_previous_session_csv() {
@@ -782,6 +802,83 @@ fn test_subrtaction_overflow() {
                 e.to_string().contains("Subtraction overflow"),
                 "Expected `Subtraction overflow` error"
             );
+        }
+    }
+}
+
+/// Tests serialization and deserialization of `Engine` using temporary CSV files.
+///
+/// This test processes transactions from a CSV file, dumps the engine state to temporary CSV files,
+/// and then loads the engine state from the temporary CSV files back into a new `Engine` instance.
+/// The test checks that the accounts and transactions in the new `Engine` instance match the ones
+/// in the original instance, thus verifying that the serialization and deserialization process works
+/// correctly.
+#[test]
+fn test_serdesr_engine() {
+    let mut engine = Engine::default();
+    let input_path = "tests/transactions_mixed.csv";
+    match read_and_process_csv_file(&mut engine, input_path) {
+        Ok(()) => println!("Transactions processed successfully"),
+        Err(e) => println!(" Some error occurred while processing transactions: {}", e),
+    }
+
+    assert_eq!(engine.accounts.len(), 4, "Expected six accounts");
+
+    {
+        // Create temporary files for transactions and accounts
+        let transactions_file = NamedTempFile::new().expect("Failed to create temporary file");
+        let accounts_file = NamedTempFile::new().expect("Failed to create temporary file");
+
+        // Use the temporary files for dumping session data
+        match engine.dump_session_to_csvs(
+            transactions_file.path().to_str().unwrap(),
+            accounts_file.path().to_str().unwrap(),
+        ) {
+            Ok(()) => {}
+            Err(e) => println!("Some error occurred dumping the engine: {}", e),
+        }
+
+        let mut engine2 = Engine::default();
+        // Deserialize transactions from temp file into engine2
+        match engine2.load_from_previous_session_csvs(
+            transactions_file.path().to_str().unwrap(),
+            accounts_file.path().to_str().unwrap(),
+        ) {
+            Ok(()) => {}
+            Err(e) => println!(
+                "Some error occurred loading the engine from previous dump: {}",
+                e
+            ),
+        }
+
+        // Compare accounts
+        for entry in engine.accounts.iter() {
+            let client_id = *entry.key();
+            let account = entry.value();
+            if let Some(account2) = engine2.accounts.get(&client_id) {
+                assert_eq!(
+                    *account, *account2,
+                    "Account mismatch for client {}",
+                    client_id
+                );
+            } else {
+                panic!("Account for client {} not found in engine2", client_id);
+            }
+        }
+
+        // Compare transactions
+        for entry in engine.transaction_log.iter() {
+            let tx_id = *entry.key();
+            let transaction = entry.value();
+            if let Some(transaction2) = engine2.transaction_log.get(&tx_id) {
+                assert_eq!(
+                    *transaction, *transaction2,
+                    "Transaction mismatch for tx_id {}",
+                    tx_id
+                );
+            } else {
+                panic!("Transaction with tx_id {} not found in engine2", tx_id);
+            }
         }
     }
 }

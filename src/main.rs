@@ -1,38 +1,44 @@
 use std::env;
 use std::time::Instant;
 
+use chrono::{DateTime, Utc};
 use csv::Writer;
 use sysinfo::System;
 
 use tempfile::NamedTempFile;
-use txn_engine::datastr::account::write_account_balances;
+use txn_engine::datastr::account::serialize_account_balances_csv;
 use txn_engine::engine::Engine;
 use txn_engine::utility::{
     generate_random_transactions, get_current_memory, read_and_process_csv_file,
 };
 
-/// The main entry point for the command-line interface.
+/// Entry point of the application. Parses command-line arguments to determine the mode of operation
+/// (normal processing or stress testing) and handles transaction processing accordingly.
 ///
-/// The program can be run in two modes:
+/// # Modes
+/// - **Normal mode**: Processes transactions from a specified CSV file and outputs the resulting account states.
+///   Optionally, the session state can be dumped after processing by including the `-dump` flag.
+/// - **Stress test mode**: Generates and processes a specified number of random transactions to test the engine's performance.
 ///
-/// 1. Normal mode: `cargo run -- transactions.csv > accounts.csv`
-///    Reads transactions from a CSV file and processes them using the Engine.
-///    Writes the resulting accounts to stdout as CSV.
+/// # Command-line Usage
+/// - Normal mode: `cargo run -- transactions.csv [-dump] > accounts.csv`
+/// - Stress test mode: `cargo run -- stress-test <number_of_transactions> > accounts.csv`
 ///
-/// 2. Stress test mode: `cargo run -- stress-test <number_of_transactions> > accounts.csv`
-///    Generates a specified number of random transactions and processes them using the Engine.
-///    Writes the resulting accounts to stdout as CSV.
-///
-/// The program returns an error if the number of arguments is incorrect.
+/// # Returns
+/// - `Ok(())` if processing completes successfully.
+/// - `Err(Box<dyn std::error::Error>)` if any errors occur, such as incorrect arguments or processing failures.
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<String> = env::args().collect();
-    if args.len() < 2 || args.len() > 3 {
-        eprintln!("Usage: cargo run -- transactions.csv > accounts.csv");
+    if args.len() < 2 || args.len() > 4 {
+        eprintln!("Usage:");
+        eprintln!("  Normal mode:     cargo run -- transactions.csv [-dump] > accounts.csv");
         eprintln!(
-            "Or for stress test: cargo run -- stress-test <number_of_transactions> > accounts.csv"
+            "  Stress test mode: cargo run -- stress-test <number_of_transactions> > accounts.csv"
         );
         return Err("Incorrect number of arguments".into());
     }
+
+    let mut engine = Engine::default();
 
     if args[1] == "stress-test" {
         if args.len() != 3 {
@@ -42,23 +48,44 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         process_stress_test(num_transactions)?;
     } else {
         let input_path = &args[1];
-        process_normal(input_path)?;
+        process_normal(&mut engine, input_path, args.contains(&"-dump".to_string()))?;
     }
 
     Ok(())
 }
 
-/// Process transactions from a CSV file and write the resulting accounts to stdout as CSV.
+/// Process transactions from a CSV file and optionally dump the session state.
+///
+/// # Parameters
+/// - `engine`: Mutable reference to the Engine that processes transactions.
+/// - `input_path`: Path to the CSV file containing transactions.
+/// - `should_dump`: Boolean indicating whether to dump the session state after processing.
 ///
 /// # Errors
-/// - `Box<dyn std::error::Error>` if any errors occur while reading from the file or processing transactions.
-fn process_normal(input_path: &str) -> Result<(), Box<dyn std::error::Error>> {
-    let mut engine = Engine::default();
-    match read_and_process_csv_file(&mut engine, input_path) {
+/// - `Box<dyn std::error::Error>` if any errors occur while reading from the file, processing transactions, or writing the dump.
+fn process_normal(
+    engine: &mut Engine,
+    input_path: &str,
+    should_dump: bool,
+) -> Result<(), Box<dyn std::error::Error>> {
+    match read_and_process_csv_file(engine, input_path) {
         Ok(()) => {}
-        Err(e) => eprintln!(" Some error occurred while processing transactions: {}", e),
+        Err(e) => eprintln!("Some error occurred while processing transactions: {}", e),
     }
-    output_results(&engine)
+
+    output_results(engine)?;
+
+    if should_dump {
+        let now: DateTime<Utc> = Utc::now();
+        let timestamp = now.format("%Y%m%d_%H%M%S").to_string();
+
+        let transactions_file = format!("{}_transaction_log.csv", timestamp);
+        let accounts_file = format!("{}_account_log.csv", timestamp);
+
+        engine.dump_session_to_csvs(&transactions_file, &accounts_file)?;
+    }
+
+    Ok(())
 }
 
 /// Process a specified number of random transactions and print performance metrics.
@@ -107,11 +134,9 @@ fn process_stress_test(num_transactions: usize) -> Result<(), Box<dyn std::error
     Ok(())
 }
 
-/// Writes the final state of all accounts to stdout as a CSV file.
+/// Outputs the final state of all accounts to stdout as a CSV file.
 ///
-/// This function leverages `write_account_balances` to handle the writing
-/// of account information in CSV format. It begins by writing the CSV header,
-/// followed by the account data. The order of the columns is:
+/// The order of the columns is:
 /// - client: The client ID.
 /// - available: The available balance for the client.
 /// - held: The held balance for the client.
@@ -124,6 +149,5 @@ fn output_results(engine: &Engine) -> Result<(), Box<dyn std::error::Error>> {
     let mut writer = Writer::from_writer(std::io::stdout());
     writer.write_record(["client", "available", "held", "total", "locked"])?;
     writer.flush()?; // Ensure the header is written before calling write_account_balances
-
-    write_account_balances(&engine.accounts)
+    serialize_account_balances_csv(&engine.accounts, std::io::stdout())
 }
