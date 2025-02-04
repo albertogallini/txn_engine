@@ -1,4 +1,4 @@
-use crate::datastr::account::{serialize_account_balances_csv, Account};
+use crate::datastr::account::Account;
 use crate::datastr::transaction::{
     serialize_transcation_log_csv, ClientId, Transaction, TransactionProcessingError,
     TransactionType, TxId,
@@ -293,22 +293,22 @@ impl Engine {
         Ok(())
     }
 
-    /// Dumps the current session's state (accounts and transactions) into CSV files.
+ 
+    /// Dumps the transaction log to a CSV file.
     ///
-    /// This function writes:
-    /// - All transactions to a file specified by `transactions_path`.
-    /// - All accounts to a file specified by `accounts_path`.
+    /// This function writes the transaction log to the file at the provided path.
+    /// The CSV file includes the transaction type, client ID, transaction ID, amount, and
+    /// the disputed status of each transaction.
     ///
     /// # Parameters
-    /// - `transactions_path`: Path where the transaction data will be written.
-    /// - `accounts_path`: Path where the account data will be written.
+    /// - `transactions_path`: The path to the CSV file to write the transaction log to.
     ///
     /// # Returns
-    /// - `Result<(), EngineError>`: Ok if the dump was successful, or an error if there was an issue with file writing or serialization.
-    pub fn dump_session_to_csvs(
+    /// - `Ok(())` if the transaction log is written to the file successfully.
+    /// - `Err(EngineError)` if there is an error writing to the file.
+    pub fn dump_transaction_log_to_csvs(
         &self,
-        transactions_path: &str,
-        accounts_path: &str,
+        transactions_path: &str
     ) -> Result<(), EngineError> {
         // Dump transactions
         {
@@ -318,15 +318,6 @@ impl Engine {
             writer.write_record(["type", "client", "tx", "amount", "disputed"])?;
             writer.flush()?; // Ensure the header is written before calling write_account_balances
             let _ = serialize_transcation_log_csv(&self.transaction_log, &file);
-        }
-
-        // Dump accounts
-        {
-            let file = File::create(accounts_path).map_err(EngineError::Io)?;
-            let mut writer = Writer::from_writer(&file);
-            writer.write_record(["client", "available", "held", "total", "locked"])?;
-            writer.flush()?; // Ensure the header is written before calling write_account_balances
-            let _ = serialize_account_balances_csv(&self.accounts, &file);
         }
 
         Ok(())

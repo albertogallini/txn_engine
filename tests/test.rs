@@ -1,4 +1,6 @@
+use csv::Writer;
 use rust_decimal::Decimal;
+use txn_engine::datastr::account::serialize_account_balances_csv;
 use std::str::FromStr;
 use txn_engine::datastr::transaction::{TransactionProcessingError, TransactionType};
 use txn_engine::engine::Engine;
@@ -433,6 +435,72 @@ fn unit_test_addition_overflow() {
     assert_eq!(engine.accounts.len(), 1, "There should be one account");
 }
 
+/// Test that transactions with decimal amounts are processed correctly, including
+/// rounding at the right precision.
+///
+/// The test checks that the total and available amounts are correct, and that
+/// there are no held funds.
+/// Deposits:
+/// 1.123456 => 1.1235 (rounded up)
+/// 1.12345 => 1.1235 (rounded up)
+/// 1.1234 => 1.1234 (no change)
+/// 1.123 => 1.1230 (adding trailing zeros for consistency)
+/// 1.12 => 1.1200
+/// 1.1 => 1.1000
+/// 1 => 1.0000
+
+/// Sum of deposits = 1.1235 + 1.1235 + 1.1234 + 1.1230 + 1.1200 + 1.1000 + 1.0000 = 7.7134
+/// Withdrawals:
+/// 0.00045 => 0.0005 (rounded up)
+/// 0.000045 => 0.0000 (rounded down to zero due to 4-digit precision)
+/// 0.0000045 => 0.0000 (rounded down to zero due to 4-digit precision)
+
+/// Sum of withdrawals = 0.0005 + 0.0000 + 0.0000 = 0.0005
+/// Net Balance Calculation:
+/// Net Balance = Sum of Deposits - Sum of Withdrawals
+/// = 7.7134 - 0.0005
+/// = 7.7129
+/// 
+#[test]
+fn unit_test_decimal_precision() {
+    let mut temp_file = NamedTempFile::new().unwrap();
+    let csv_content = r#"type,client,tx,amount,\n
+                                deposit,1,1,1.123456,\n
+                                deposit,1,2,1.12345,\n
+                                deposit,1,3,1.1234,\n
+                                deposit,1,4,1.123,\n
+                                deposit,1,5,1.12,\n
+                                deposit,1,6,1.1,\n
+                                deposit,1,7,1,\n
+                                withdrawal,1,8,0.00045,\n
+                                withdrawal,1,9,0.000045,\n
+                                withdrawal,1,10,0.0000045,"#;
+
+    write!(temp_file, "{}", csv_content).unwrap();
+    let input_path = temp_file.path().to_str().unwrap();
+
+    let mut engine = Engine::default();
+    match read_and_process_csv_file(&mut engine, input_path) {
+        Ok(()) => panic!("read_and_process_csv_file is expeceted to fail"),
+        Err(e) => {
+            println!("Error: {}", e);
+            assert!(
+                e.to_string().contains("Withdrawal amount must be greater than 0"),
+                "Expected `Withdrawal amount must be greater than 0`error"
+            );
+        }
+    }
+
+    // Check specific account details
+    let account = engine.accounts.get(&1).expect("Account 1 should exist");
+
+    // Here are assertions for each transaction based on the expected rounding:
+    assert_eq!(account.total, Decimal::from_str("7.7129").unwrap());
+    assert_eq!(account.available, Decimal::from_str("7.7129").unwrap());
+    assert_eq!(account.held, Decimal::from_str("0.0000").unwrap());
+}
+
+
 /// Test that transactions are processed correctly from a CSV file.
 ///
 /// The CSV file `tests/transactions_basic.csv` contains three deposits and two withdrawal.
@@ -630,35 +698,6 @@ fn test_from_csv_file_error_conditions() {
     assert_eq!(engine.accounts.len(), 4);
 }
 
-/// Test that transactions with decimal amounts are processed correctly, including
-/// rounding at the right precision.
-///
-/// The test checks that the total and available amounts are correct, and that
-/// there are no held funds.
-#[test]
-fn test_from_csv_file_decimal_precision() {
-    let mut engine = Engine::default();
-    let input_path = "tests/transactions_digits.csv";
-    match read_and_process_csv_file(&mut engine, input_path) {
-        Ok(()) => println!("Transactions processed successfully"),
-        Err(e) => println!("Some error occurred while processing transactions: {}", e),
-    }
-
-    // Check if we have processed transactions for exactly one client
-    assert_eq!(
-        engine.accounts.len(),
-        1,
-        "Should have processed transactions for one client"
-    );
-
-    // Check specific account details
-    let account = engine.accounts.get(&1).expect("Account 1 should exist");
-
-    // Here are assertions for each transaction based on the expected rounding:
-    assert_eq!(account.total, Decimal::from_str("7.7129").unwrap());
-    assert_eq!(account.available, Decimal::from_str("7.7129").unwrap());
-    assert_eq!(account.held, Decimal::from_str("0.0000").unwrap());
-}
 
 /// Tests loading transactions and accounts from CSV files into the `Engine`.
 ///
@@ -806,13 +845,20 @@ fn test_subrtaction_overflow() {
     }
 }
 
-/// Tests serialization and deserialization of `Engine` using temporary CSV files.
-///
-/// This test processes transactions from a CSV file, dumps the engine state to temporary CSV files,
-/// and then loads the engine state from the temporary CSV files back into a new `Engine` instance.
-/// The test checks that the accounts and transactions in the new `Engine` instance match the ones
-/// in the original instance, thus verifying that the serialization and deserialization process works
-/// correctly.
+
+    /// Tests serialization and deserialization of the `Engine` to and from CSV files.
+    ///
+    /// This test creates a temporary file for transactions and accounts,
+    /// writes predefined data into them, and then loads this data into an
+    /// `Engine` instance using the `load_from_previous_session_csvs` method.
+    ///
+    /// It then dumps the `Engine` state to a temporary file using the
+    /// `dump_transaction_log_to_csvs` method and loads the data from the
+    /// temporary file into another `Engine` instance.
+    ///
+    /// It verifies that the transactions and accounts are correctly loaded by
+    /// asserting the number of entries and checking specific transaction and
+    /// account details.
 #[test]
 fn test_serdesr_engine() {
     let mut engine = Engine::default();
@@ -822,21 +868,26 @@ fn test_serdesr_engine() {
         Err(e) => println!(" Some error occurred while processing transactions: {}", e),
     }
 
-    assert_eq!(engine.accounts.len(), 4, "Expected six accounts");
+    assert_eq!(engine.accounts.len(), 4, "Expected four accounts");
 
     {
-        // Create temporary files for transactions and accounts
+        // Create temporary files for transactions
         let transactions_file = NamedTempFile::new().expect("Failed to create temporary file");
-        let accounts_file = NamedTempFile::new().expect("Failed to create temporary file");
-
         // Use the temporary files for dumping session data
-        match engine.dump_session_to_csvs(
-            transactions_file.path().to_str().unwrap(),
-            accounts_file.path().to_str().unwrap(),
+        match engine.dump_transaction_log_to_csvs(
+            transactions_file.path().to_str().unwrap()
         ) {
             Ok(()) => {}
             Err(e) => println!("Some error occurred dumping the engine: {}", e),
         }
+        
+        // Create temporary files for  accounts
+        let accounts_file = NamedTempFile::new().expect("Failed to create temporary file");
+        let mut writer = Writer::from_writer(&accounts_file);
+        // Use the temporary files for dumping session data
+        writer.write_record(["client", "available", "held", "total", "locked"]).unwrap();
+        writer.flush().unwrap();
+        let _ = serialize_account_balances_csv(&engine.accounts, &accounts_file);
 
         let mut engine2 = Engine::default();
         // Deserialize transactions from temp file into engine2

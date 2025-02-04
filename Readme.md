@@ -50,6 +50,12 @@ To process a transactions csv file:
 cargo run --release -- transactions.csv > accounts.csv
 ```
 
+To process a transactions csv file and dump the engine status `accounts` and `transaction_logs`:
+
+```sh
+cargo run --release -- transactions.csv -dump > accounts.csv
+```
+
 For stress testing with internally generated transactions:
 
 ```sh

@@ -80,9 +80,8 @@ fn process_normal(
         let timestamp = now.format("%Y%m%d_%H%M%S").to_string();
 
         let transactions_file = format!("{}_transaction_log.csv", timestamp);
-        let accounts_file = format!("{}_account_log.csv", timestamp);
 
-        engine.dump_session_to_csvs(&transactions_file, &accounts_file)?;
+        engine.dump_transaction_log_to_csvs(&transactions_file)?;
     }
 
     Ok(())
