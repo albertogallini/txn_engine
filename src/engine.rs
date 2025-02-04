@@ -211,7 +211,7 @@ impl Engine {
     /// - `Ok(())` if all transactions are processed without errors.
     /// - `Err(TransactionProcessingError)` if any errors occur during processing or reading.
     pub fn read_and_process_csv_file(
-        engine: &mut Engine,
+        &mut self,
         input_path: &str,
     ) -> Result<(), TransactionProcessingError> {
         const BATCH_SIZE: usize = 16_384;
@@ -222,7 +222,7 @@ impl Engine {
         let reader = BufReader::new(file);
 
         // Call the method from the Engine struct
-        engine.read_and_process_transactions(reader, BATCH_SIZE)
+        self.read_and_process_transactions(reader, BATCH_SIZE)
     }
 
     /// Reads transactions from a stream in chunk and processes them.

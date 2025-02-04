@@ -66,7 +66,7 @@ fn process_normal(
     input_path: &str,
     should_dump: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    match Engine::read_and_process_csv_file(engine, input_path) {
+    match engine.read_and_process_csv_file(input_path) {
         Ok(()) => {}
         Err(e) => eprintln!("Some error occurred while processing transactions: {}", e),
     }
@@ -109,7 +109,7 @@ fn process_stress_test(num_transactions: usize) -> Result<(), Box<dyn std::error
     generate_random_transactions(num_transactions, &temp_file)?;
 
     // Process transactions directly from the temporary file
-    match Engine::read_and_process_csv_file(&mut engine, temp_file.path().to_str().unwrap()) {
+    match engine.read_and_process_csv_file(temp_file.path().to_str().unwrap()) {
         Ok(()) => {}
         Err(e) => eprintln!("Error during stress test: {}", e),
     }
