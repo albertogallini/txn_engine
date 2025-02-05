@@ -165,10 +165,10 @@ I/O Error - deserialization of Engine internal state from a previous session dum
 - **EngineSerDeserError::InvalidDecimal**: Parsing error while reading a previous session csv -> InvalidBool
 
 #### Memory Efficiency
-The engine is designed to be memory efficient, processing transactions through buffering the input csv stream to ensure scalability even with large datasets. See `read_and_process_transactions` in `utility.rs`
+The engine is designed to be memory efficient, processing transactions through buffering the input csv stream to ensure scalability even with large datasets. See `read_and_process_transactions` in `./src/utility.rs`
 
 #### Concurrency Management
-In spite of `main.rs` implementing a single process that reads sequentially from an input CSV stream, the internal `Engine` is designed to support concurrent input transaction streams. Incorporating `DashMap` into the `Engine` struct for managing `accounts` and `transaction_log` provides a concurrent, thread-safe hash map implementation that significantly enhances our system's performance and scalability. <u>By allowing multiple threads to read or write to different entries simultaneously without explicit locking, `DashMap` reduces lock contention: Instead of locking the entire map or individual entries, `DashMap` uses fine-grained locking internally (i.e sharded locking'), reducing contention when many threads are accessing different parts of the data map. It improves memory efficiency, and simplifies the codebase, making it easier to manage concurrent operations across potentially thousands of client transactions</u>. This choice supports the goal of creating a high-throughput, low-latency transaction processing system that can scale with demand, all while maintaining code maintainability.<br>
+In spite of `./src/main.rs` implementing a single process that reads sequentially from an input CSV stream, the internal `Engine` is designed to support concurrent input transaction streams. Incorporating `DashMap` into the `Engine` struct for managing `accounts` and `transaction_log` provides a concurrent, thread-safe hash map implementation that significantly enhances our system's performance and scalability. <u>By allowing multiple threads to read or write to different entries simultaneously without explicit locking, `DashMap` reduces lock contention: Instead of locking the entire map or individual entries, `DashMap` uses fine-grained locking internally (i.e sharded locking'), reducing contention when many threads are accessing different parts of the data map. It improves memory efficiency, and simplifies the codebase, making it easier to manage concurrent operations across potentially thousands of client transactions</u>. This choice supports the goal of creating a high-throughput, low-latency transaction processing system that can scale with demand, all while maintaining code maintainability.<br>
 
 - Benefits of [`DashMap`](https://docs.rs/dashmap/latest/dashmap/struct.DashMap.html):
   - Concurrency:
@@ -181,6 +181,7 @@ In spite of `main.rs` implementing a single process that reads sequentially from
     - Familiar API: DashMap provides an API very similar to HashMap, making it easier for developers familiar with HashMap to transition or use interchangeably in many cases.
     - Iterator Support: It supports iterators, including those that are safe for concurrent use (iter()), which simplifies working with map data in a thread-safe manner.   
 
+See also `test_engine_consistency_with_concurrent_processing` test case in `/tests/test.rs`
 
 #### Generalization of Disputes:
 - Deposits: When disputing a deposit, you would move the disputed amount from available to held. This keeps the total the same since you're just reallocating the funds.
@@ -280,7 +281,7 @@ Transactions Count   Time                 Process Memory (MB)  Engine Memory (MB
 So overall performance of txn_engine, on the aformenthioned assumption, on this machine is `~500.000 transactions/s`  with a avg `~[15.000 (Process Memory) - 150.000 (Engine Memory)] transation/Mb` memory impact on the user account/transaction log storage.
 The plots also show that both time and memory scale as O(n).<br><br>
 Comments:
--  read the comment of 'Engine.size_of' function to see how the Engine Memory is computed. The Engine size does not take into account the data structure overhead
--  the Process Memory takes into account the entire memory space of the process, including the Rust runtime and the I/O and other data structures
+-  read the comment of `Engine.size_of` function to see how the Engine Memory is computed. The Engine size does not take into account the data structure overhead
+-  the Process Memory takes into account the entire process memory footprint, including the Rust runtime the memory allocation for the I/O and other data structures: this explain the big difference with the Engine memory measures.
 -  the Process Memory is controlled by the runtime and the OS, so it is more volatile
 -  so it is legitimate to have a wide range for the #transaction/MB estimate, but the fact that it is ~constant over time respect to the process memory footprint suggests the implementation of txn_engine does not degrade with input size
