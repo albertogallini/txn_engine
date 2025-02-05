@@ -102,6 +102,7 @@ This project consists of several key components, each responsible for different 
 #### utility.rs 
 
 - **`generate_random_transactions`**: Creates a CSV file with randomly generated transactions for stress testing purposes.
+- **`generate_deposit_withdrawal_transactions`**: Generates a specified number of random  deposit/withdrawal transactions and writes them to a temporary CSV file for stress testing purposes.
 - **`get_current_memory`**:Retrieves the memory usage of the current process.
 
 #### Key Methods in Engine and Complexity Analysis

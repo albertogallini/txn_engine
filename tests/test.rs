@@ -1,9 +1,11 @@
 use csv::Writer;
 use rust_decimal::Decimal;
+use std::fs::File;
 use std::str::FromStr;
 use txn_engine::datastr::account::serialize_account_balances_csv;
 use txn_engine::datastr::transaction::{TransactionProcessingError, TransactionType};
 use txn_engine::engine::Engine;
+use txn_engine::utility::generate_deposit_withdrawal_transactions;
 
 use std::io::Write;
 use tempfile::NamedTempFile;
@@ -927,6 +929,140 @@ fn test_serdesr_engine() {
             } else {
                 panic!("Transaction with tx_id {} not found in engine2", tx_id);
             }
+        }
+    }
+}
+
+use std::sync::Arc;
+use std::thread;
+/// Test that the engine produces consistent results even when processing transactions concurrently.
+/// This test is not exhaustive but provides a reasonable level of confidence that the engine is
+/// thread-safe and can handle concurrent transaction processing.
+///
+/// The test creates two engines, `engine1` and `engine2`. It processes three files sequentially
+/// with `engine1` and concurrently with `engine2`. It then compares the account snapshots of
+/// `engine1` and `engine2` to ensure they are equal.
+///
+/// Transactions are generated in a way that every file contains a disjoint set of client IDs and tx IDs,
+/// so concurrent executions (i.e. with different transaction execution orders) won't cause different
+/// final amounts in the client accounts (if the engine manage the concurrency correctly).
+#[test]
+fn test_engine_consistency_with_concurrent_processing() {
+    // Generate 3 temp files with consistent random transactions
+    let temp_file1 = generate_deposit_withdrawal_transactions(100, 0, 1, 10).unwrap();
+    let temp_file2 = generate_deposit_withdrawal_transactions(100, 100, 20, 30).unwrap();
+    let temp_file3 = generate_deposit_withdrawal_transactions(100, 200, 40, 50).unwrap();
+
+    /* debug
+    let mut writer = Writer::from_writer(std::io::stdout());
+    let mut source = File::open(temp_file1.path()).unwrap();
+    let mut destination = File::create("tempfile1.csv").unwrap();
+    std::io::copy(&mut source, &mut destination).unwrap();
+    let mut source = File::open(temp_file2.path()).unwrap();
+    let mut destination = File::create("tempfile2.csv").unwrap();
+    std::io::copy(&mut source, &mut destination).unwrap();
+    let mut source = File::open(temp_file3.path()).unwrap();
+    let mut destination = File::create("tempfile3.csv").unwrap();
+    std::io::copy(&mut source, &mut destination).unwrap();
+     */
+    // Create two engines
+    let engine1 = Engine::new();
+    let engine2 = Arc::new(Engine::new());
+
+    // Process files sequentially with engine1
+    match engine1.read_and_process_transactions(File::open(temp_file1.path()).unwrap(), 100) {
+        Ok(()) => {}
+        Err(..) => {}
+    }
+    match engine1.read_and_process_transactions(File::open(temp_file2.path()).unwrap(), 100) {
+        Ok(()) => {}
+        Err(..) => {}
+    }
+    match engine1.read_and_process_transactions(File::open(temp_file3.path()).unwrap(), 100) {
+        Ok(()) => {}
+        Err(..) => {}
+    }
+
+    // Process files concurrently with engine2
+    let handles = vec![
+        {
+            let engine2 = Arc::clone(&engine2);
+            let file = File::open(temp_file1.path()).unwrap();
+            thread::spawn(
+                move || match engine2.read_and_process_transactions(file, 100) {
+                    Ok(()) => {}
+                    Err(..) => {}
+                },
+            )
+        },
+        {
+            let engine2 = Arc::clone(&engine2);
+            let file = File::open(temp_file2.path()).unwrap();
+            thread::spawn(
+                move || match engine2.read_and_process_transactions(file, 100) {
+                    Ok(()) => {}
+                    Err(..) => {}
+                },
+            )
+        },
+        {
+            let engine2 = Arc::clone(&engine2);
+            let file = File::open(temp_file3.path()).unwrap();
+            thread::spawn(
+                move || match engine2.read_and_process_transactions(file, 100) {
+                    Ok(()) => {}
+                    Err(..) => {}
+                },
+            )
+        },
+    ];
+
+    // Wait for all threads to complete
+    for handle in handles {
+        handle.join().unwrap();
+    }
+
+    /* debug
+    writer.write_record(["client", "available", "held", "total", "locked"]).unwrap();
+    writer.flush().unwrap();
+    serialize_account_balances_csv(&engine1.accounts, std::io::stdout());
+    writer.write_record(["client", "available", "held", "total", "locked"]).unwrap();
+    writer.flush().unwrap();
+    serialize_account_balances_csv(&engine2.accounts, std::io::stdout());
+     */
+
+    // Compare account snapshots
+    for account1_entry in engine1.accounts.iter() {
+        if let Some(account2) = engine2.accounts.get(account1_entry.key()) {
+            assert_eq!(
+                account1_entry.value().available,
+                account2.available,
+                "Available balance mismatch for client {}",
+                account1_entry.key()
+            );
+            assert_eq!(
+                account1_entry.value().held,
+                account2.held,
+                "Held balance mismatch for client {}",
+                account1_entry.key()
+            );
+            assert_eq!(
+                account1_entry.value().total,
+                account2.total,
+                "Total balance mismatch for client {}",
+                account1_entry.key()
+            );
+            assert_eq!(
+                account1_entry.value().locked,
+                account2.locked,
+                "Locked status mismatch for client {}",
+                account1_entry.key()
+            );
+        } else {
+            panic!(
+                "Account for client {} not found in engine2",
+                account1_entry.key()
+            );
         }
     }
 }
