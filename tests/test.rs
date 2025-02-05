@@ -948,10 +948,11 @@ use std::thread;
 /// final amounts in the client accounts (if the engine manage the concurrency correctly).
 #[test]
 fn test_engine_consistency_with_concurrent_processing() {
+    const BUF_SIZE: usize = 1024;
     // Generate 3 temp files with consistent random transactions
-    let temp_file1 = generate_deposit_withdrawal_transactions(100, 0, 1, 10).unwrap();
-    let temp_file2 = generate_deposit_withdrawal_transactions(100, 100, 20, 30).unwrap();
-    let temp_file3 = generate_deposit_withdrawal_transactions(100, 200, 40, 50).unwrap();
+    let temp_file1 = generate_deposit_withdrawal_transactions(10000, 0, 1, 10).unwrap();
+    let temp_file2 = generate_deposit_withdrawal_transactions(10000, 10000, 20, 30).unwrap();
+    let temp_file3 = generate_deposit_withdrawal_transactions(10000, 20000, 40, 50).unwrap();
 
     /* debug
     let mut writer = Writer::from_writer(std::io::stdout());
@@ -970,15 +971,15 @@ fn test_engine_consistency_with_concurrent_processing() {
     let engine2 = Arc::new(Engine::new());
 
     // Process files sequentially with engine1
-    match engine1.read_and_process_transactions(File::open(temp_file1.path()).unwrap(), 100) {
+    match engine1.read_and_process_transactions(File::open(temp_file1.path()).unwrap(), BUF_SIZE) {
         Ok(()) => {}
         Err(..) => {}
     }
-    match engine1.read_and_process_transactions(File::open(temp_file2.path()).unwrap(), 100) {
+    match engine1.read_and_process_transactions(File::open(temp_file2.path()).unwrap(), BUF_SIZE) {
         Ok(()) => {}
         Err(..) => {}
     }
-    match engine1.read_and_process_transactions(File::open(temp_file3.path()).unwrap(), 100) {
+    match engine1.read_and_process_transactions(File::open(temp_file3.path()).unwrap(), BUF_SIZE) {
         Ok(()) => {}
         Err(..) => {}
     }
@@ -989,7 +990,7 @@ fn test_engine_consistency_with_concurrent_processing() {
             let engine2 = Arc::clone(&engine2);
             let file = File::open(temp_file1.path()).unwrap();
             thread::spawn(
-                move || match engine2.read_and_process_transactions(file, 100) {
+                move || match engine2.read_and_process_transactions(file, BUF_SIZE) {
                     Ok(()) => {}
                     Err(..) => {}
                 },
@@ -999,7 +1000,7 @@ fn test_engine_consistency_with_concurrent_processing() {
             let engine2 = Arc::clone(&engine2);
             let file = File::open(temp_file2.path()).unwrap();
             thread::spawn(
-                move || match engine2.read_and_process_transactions(file, 100) {
+                move || match engine2.read_and_process_transactions(file, BUF_SIZE) {
                     Ok(()) => {}
                     Err(..) => {}
                 },
@@ -1009,7 +1010,7 @@ fn test_engine_consistency_with_concurrent_processing() {
             let engine2 = Arc::clone(&engine2);
             let file = File::open(temp_file3.path()).unwrap();
             thread::spawn(
-                move || match engine2.read_and_process_transactions(file, 100) {
+                move || match engine2.read_and_process_transactions(file, BUF_SIZE) {
                     Ok(()) => {}
                     Err(..) => {}
                 },
