@@ -281,7 +281,8 @@ Transactions Count   Time                 Process Memory (MB)  Engine Memory (MB
 So overall performance of txn_engine, on the aformenthioned assumption, on this machine is `~500.000 transactions/s`  with a avg `~[15.000 (Process Memory) - 150.000 (Engine Memory)] transation/Mb` memory impact on the user account/transaction log storage.
 The plots also show that both time and memory scale as O(n).<br><br>
 Comments:
--  read the comment of `Engine.size_of` function to see how the Engine Memory is computed. The Engine size does not take into account the data structure overhead
--  the Process Memory takes into account the entire process memory footprint, including the Rust runtime the memory allocation for the I/O and other data structures: this explain the big difference with the Engine memory measures.
--  the Process Memory is controlled by the runtime and the OS, so it is more volatile
--  so it is legitimate to have a wide range for the #transaction/MB estimate, but the fact that it is ~constant over time respect to the process memory footprint suggests the implementation of txn_engine does not degrade with input size
+-  Read the comment of `Engine.size_of` function to see how the Engine Memory is computed. The Engine size does not take into account the data structure overhead.
+-  The Process Memory takes into account the entire process memory footprint, including the Rust runtime and the memory allocation for the I/O and other data structures: this explains the big difference with the Engine memory measures.
+-  The Process Memory is controlled by the runtime and the OS, so it is more volatile.
+-  The Engine Memory is not only dependent on the number of input transactions but also by the amount of errors (e.g. too big withdrawal or dispute on invalid tx id) that affects the Engine internal maps size.
+-  So it is legitimate to have a big discrepancy for the #transaction/MB estimate Process Memory vs Engine Memory, but the fact that it is ~constant over time respect to the process memory footprint suggests the implementation of txn_engine does not degrade with input size.
