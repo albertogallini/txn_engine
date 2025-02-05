@@ -19,7 +19,7 @@ This project implements a transaction processing system with the following capab
   - **`Withdrawal`**: Decreases the available and total funds if sufficient funds are present.
   - **`Dispute`**: Moves disputed funds from available to held, keeping total funds constant.
   - **`Resolve`**: Moves funds back from held to available, ending a dispute.
-  - **`Chargeback`**: Reverses a disputed transaction, reducing total funds and locking the account.
+  - **`Chargeback`**: Reverses a disputed transaction, adjusting the total and the held funds accordingly and locking the account.
 - **Error Handling**: 
   - Comprehensive error checks throughout transaction processing.
   - I/O & Ser/DeSer error handling. 
@@ -313,3 +313,8 @@ Comments:
 -  The Process Memory is controlled by the runtime and the OS, so it is more volatile.
 -  The Engine Memory is not only dependent on the number of input transactions but also by the amount of errors (e.g. too big withdrawal or dispute on invalid tx id) that affects the Engine internal maps size.
 -  So it is legitimate to have a big discrepancy for the #transaction/MB estimate Process Memory vs Engine Memory, but the fact that it is ~constant over time respect to the process memory footprint suggests the implementation of txn_engine does not degrade with input size.
+
+NOTE: the shell script uses `output=$(./target/release/txn_engine stress-test $formatted_i 2>&1)` which  captures the output in memory (using $()) before writing to files.
+Output redirection here happens in memory first this is  more efficient than direct file I/O like that happens when using the command directly `./target/release/txn_engine  stress-test 2000000 > accounts.csv 2>&1`
+especially when large amounts of data (errors and account dump) is generated.
+
