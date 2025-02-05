@@ -73,6 +73,7 @@ For stress testing suite to measure time and memory conumption (run `cargo build
 ```sh
 ./stress-test.sh
 ```
+<i>NOTE: The execution takes longer than the sum of the reported times because the measured elapsed time does not include the time to output and error dumping. </i>
 
 ## Implementation Description & Assumptions 
 
