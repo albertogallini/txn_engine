@@ -23,7 +23,11 @@ where
     }
 }
 
-pub fn deserialize_amount_r<'de, D>(deserializer: D) -> Result<Decimal, D::Error>
+/// Deserialize an amount from a CSV string and round it to four decimal places using the midpoint away
+/// from zero rounding strategy. If the string is empty, return an error instead of Option::None.
+///
+/// The input string is trimmed before parsing. If parsing fails, an error is returned.
+pub fn deserialize_account_amount<'de, D>(deserializer: D) -> Result<Decimal, D::Error>
 where
     D: Deserializer<'de>,
 {

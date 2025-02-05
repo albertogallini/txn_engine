@@ -4,16 +4,16 @@ use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use std::io::Write;
 
-use super::deser::{deserialize_amount_r, deserialize_trimmed_string};
+use super::deser::{deserialize_account_amount, deserialize_trimmed_string};
 
 // Represents an account
 #[derive(Debug, Default, Clone, Deserialize, Serialize, PartialEq)]
 pub struct Account {
-    #[serde(deserialize_with = "deserialize_amount_r")]
+    #[serde(deserialize_with = "deserialize_account_amount")]
     pub available: Decimal,
-    #[serde(deserialize_with = "deserialize_amount_r")]
+    #[serde(deserialize_with = "deserialize_account_amount")]
     pub held: Decimal,
-    #[serde(deserialize_with = "deserialize_amount_r")]
+    #[serde(deserialize_with = "deserialize_account_amount")]
     pub total: Decimal,
     #[serde(deserialize_with = "deserialize_trimmed_string::<bool,_>")]
     pub locked: bool,

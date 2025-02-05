@@ -2,11 +2,9 @@ use std::env;
 use std::time::Instant;
 
 use chrono::{DateTime, Utc};
-use csv::Writer;
 use sysinfo::System;
 
 use tempfile::NamedTempFile;
-use txn_engine::datastr::account::serialize_account_balances_csv;
 use txn_engine::engine::Engine;
 use txn_engine::utility::{generate_random_transactions, get_current_memory};
 
@@ -68,10 +66,10 @@ fn process_normal(
 ) -> Result<(), Box<dyn std::error::Error>> {
     match engine.read_and_process_csv_file(input_path) {
         Ok(()) => {}
-        Err(e) => eprintln!("Some error occurred while processing transactions: {}", e),
+        Err(e) => eprintln!("Error: {}", e),
     }
 
-    output_results(engine)?;
+    engine.output_results(std::io::stdout(), engine)?;
 
     if should_dump {
         let now: DateTime<Utc> = Utc::now();
@@ -126,25 +124,7 @@ fn process_stress_test(num_transactions: usize) -> Result<(), Box<dyn std::error
         eprintln!("Memory consumption delta: {:.3} MB", memory_delta_mb);
     }
 
-    output_results(&engine)?;
+    engine.output_results(std::io::stdout(), &engine)?;
 
     Ok(())
-}
-
-/// Outputs the final state of all accounts to stdout as a CSV file.
-///
-/// The order of the columns is:
-/// - client: The client ID.
-/// - available: The available balance for the client.
-/// - held: The held balance for the client.
-/// - total: The total balance for the client.
-/// - locked: Whether the account is locked.
-///
-/// # Errors
-/// - `Box<dyn std::error::Error>` if any errors occur while writing to stdout.
-fn output_results(engine: &Engine) -> Result<(), Box<dyn std::error::Error>> {
-    let mut writer = Writer::from_writer(std::io::stdout());
-    writer.write_record(["client", "available", "held", "total", "locked"])?;
-    writer.flush()?; // Ensure the header is written before calling write_account_balances
-    serialize_account_balances_csv(&engine.accounts, std::io::stdout())
 }

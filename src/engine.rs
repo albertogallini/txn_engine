@@ -1,16 +1,15 @@
-use crate::datastr::account::Account;
+use crate::datastr::account::{serialize_account_balances_csv, Account};
 use crate::datastr::transaction::{
     serialize_transcation_log_csv, ClientId, Transaction, TransactionProcessingError,
     TransactionType, TxId,
 };
 use dashmap::DashMap;
-use std::error::Error;
 use std::fs::File;
 use thiserror::Error;
 
 use csv::{ReaderBuilder, Trim, Writer};
 use rust_decimal::Decimal;
-use std::io::{BufReader, Read};
+use std::io::{BufReader, Read, Write};
 
 #[derive(Debug, Error)]
 pub enum EngineError {
@@ -77,12 +76,12 @@ pub struct Engine {
 }
 
 pub trait EngineFunctions {
-    fn process_transaction(&self, tx: &Transaction) -> Result<(), Box<dyn Error>>;
-    fn process_deposit(&self, tx: &Transaction) -> Result<(), Box<dyn Error>>;
-    fn process_withdrawal(&self, tx: &Transaction) -> Result<(), Box<dyn Error>>;
-    fn process_dispute(&self, tx: &Transaction) -> Result<(), Box<dyn Error>>;
-    fn process_resolve(&self, tx: &Transaction) -> Result<(), Box<dyn Error>>;
-    fn process_chargeback(&self, tx: &Transaction) -> Result<(), Box<dyn Error>>;
+    fn process_transaction(&self, tx: &Transaction) -> Result<(), EngineError>;
+    fn process_deposit(&self, tx: &Transaction) -> Result<(), EngineError>;
+    fn process_withdrawal(&self, tx: &Transaction) -> Result<(), EngineError>;
+    fn process_dispute(&self, tx: &Transaction) -> Result<(), EngineError>;
+    fn process_resolve(&self, tx: &Transaction) -> Result<(), EngineError>;
+    fn process_chargeback(&self, tx: &Transaction) -> Result<(), EngineError>;
 }
 
 impl Engine {
@@ -320,8 +319,26 @@ impl Engine {
                 .from_reader(BufReader::new(file));
 
             for result in rdr.deserialize::<Transaction>() {
-                let transaction: Transaction = result.map_err(EngineSerDeserError::Csv)?;
-                self.transaction_log.insert(transaction.tx, transaction);
+                match result {
+                    Ok(transaction) => {
+                        self.transaction_log.insert(transaction.tx, transaction);
+                    }
+                    Err(e) => {
+                        eprintln!("Error parsing CSV record: {:?}", e);
+                        match e.kind() {
+                            csv::ErrorKind::Deserialize {
+                                pos: Some(pos),
+                                err,
+                            } => eprintln!(
+                                "Error at line {}, position {}: {}",
+                                pos.line(),
+                                pos.byte(),
+                                err
+                            ),
+                            _ => eprintln!("Unexpected CSV error: {}", e),
+                        }
+                    }
+                }
             }
         }
 
@@ -359,6 +376,28 @@ impl Engine {
         Ok(())
     }
 
+    /// Outputs the final state of all accounts to stdout as a CSV file.
+    ///
+    /// The order of the columns is:
+    /// - client: The client ID.
+    /// - available: The available balance for the client.
+    /// - held: The held balance for the client.
+    /// - total: The total balance for the client.
+    /// - locked: Whether the account is locked.
+    ///
+    /// # Errors
+    /// - `Box<dyn std::error::Error>` if any errors occur while writing to stdout.
+    pub fn output_results<W: Write>(
+        &self,
+        writer: W,
+        engine: &Engine,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let mut csv_writer = Writer::from_writer(writer);
+        csv_writer.write_record(["client", "available", "held", "total", "locked"])?;
+        csv_writer.flush()?; // Ensure the header is written before calling write_account_balances
+        serialize_account_balances_csv(&engine.accounts, std::io::stdout())
+    }
+
     /// Dumps the transaction log to a CSV file.
     ///
     /// This function writes the transaction log to the file at the provided path.
@@ -392,7 +431,7 @@ impl Engine {
 impl EngineFunctions for Engine {
     /// Process a transaction. This function is a dispatch to the correct processing function
     /// for the given transaction type.
-    fn process_transaction(&self, tx: &Transaction) -> Result<(), Box<dyn Error>> {
+    fn process_transaction(&self, tx: &Transaction) -> Result<(), EngineError> {
         match tx.ty {
             TransactionType::Deposit => self.process_deposit(tx)?,
             TransactionType::Withdrawal => self.process_withdrawal(tx)?,
@@ -410,26 +449,26 @@ impl EngineFunctions for Engine {
     ///
     /// # Returns
     /// - `Ok(())`: If the transaction is successfully processed.
-    /// - `Err(Box<dyn Error>)`: If the transaction is invalid or if the account is locked.
+    /// - `Err(EngineError)`: If the transaction is invalid or if the account is locked.
     ///
     /// # Errors
     /// - `NoAmount`: If the transaction does not have an amount.
     /// - `DepositAmountInvalid`: If the transaction amount is not greater than 0.
     /// - `TransactionRepeated`: If the transaction id has already been processed in this session.
     /// - `AccountLocked`: If the account is already locked.
-    fn process_deposit(&self, tx: &Transaction) -> Result<(), Box<dyn Error>> {
+    fn process_deposit(&self, tx: &Transaction) -> Result<(), EngineError> {
         let amount = tx.amount.ok_or(EngineError::NoAmount)?;
         if amount <= Decimal::from(0) {
-            return Err(EngineError::DepositAmountInvalid.into());
+            return Err(EngineError::DepositAmountInvalid);
         }
         if self.transaction_log.contains_key(&tx.tx) {
-            return Err(EngineError::TransactionRepeated.into());
+            return Err(EngineError::TransactionRepeated);
         }
 
         let mut account = self.accounts.entry(tx.client).or_default();
 
         if account.locked {
-            return Err(EngineError::AccountLocked.into());
+            return Err(EngineError::AccountLocked);
         }
 
         account.available = Engine::safe_add(&account.available, &amount)?;
@@ -446,7 +485,7 @@ impl EngineFunctions for Engine {
     ///
     /// # Returns
     /// - `Ok(())`: If the transaction is successfully processed.
-    /// - `Err(Box<dyn Error>)`: If the transaction is invalid or if the account is locked.
+    /// - `Err(EngineError)`: If the transaction is invalid or if the account is locked.
     ///
     /// # Errors
     /// - `NoAmount`: If the transaction does not have an amount.
@@ -455,26 +494,26 @@ impl EngineFunctions for Engine {
     /// - `AccountLocked`: If the account is already locked.
     /// - `InsufficientFunds`: If the account does not have enough available funds.
     /// - `AccountNotFound`: If the account does not exist.
-    fn process_withdrawal(&self, tx: &Transaction) -> Result<(), Box<dyn Error>> {
+    fn process_withdrawal(&self, tx: &Transaction) -> Result<(), EngineError> {
         let amount = tx.amount.ok_or(EngineError::NoAmount)?;
         if amount <= Decimal::from(0) {
-            return Err(EngineError::WithdrawalAmountInvalid.into());
+            return Err(EngineError::WithdrawalAmountInvalid);
         }
         if self.transaction_log.contains_key(&tx.tx) {
-            return Err(EngineError::TransactionRepeated.into());
+            return Err(EngineError::TransactionRepeated);
         }
         if let Some(mut account) = self.accounts.get_mut(&tx.client) {
             if account.locked {
-                return Err(EngineError::AccountLocked.into());
+                return Err(EngineError::AccountLocked);
             }
             if account.available >= amount {
                 account.available = Engine::safe_sub(&account.available, &amount)?;
                 account.total = Engine::safe_sub(&account.total, &amount)?;
             } else {
-                return Err(EngineError::InsufficientFunds.into());
+                return Err(EngineError::InsufficientFunds);
             }
         } else {
-            return Err(EngineError::AccountNotFound.into());
+            return Err(EngineError::AccountNotFound);
         }
 
         self.transaction_log.insert(tx.tx, tx.clone());
@@ -488,16 +527,16 @@ impl EngineFunctions for Engine {
     ///
     /// # Returns
     /// - `Ok(())`: If the transaction is successfully processed.
-    /// - `Err(Box<dyn Error>)`: If the transaction is invalid or if the account is locked.
+    /// - `Err(EngineError)`: If the transaction is invalid or if the account is locked.
     ///
     /// # Errors
     /// - `TransactionNotFound`: If the transaction id is not found in the transaction log.
     /// - `AccountNotFound`: If the client id is not found in the accounts map.
     /// - `AccountLocked`: If the account is already locked.
-    fn process_dispute(&self, tx: &Transaction) -> Result<(), Box<dyn Error>> {
+    fn process_dispute(&self, tx: &Transaction) -> Result<(), EngineError> {
         if let Some(mut account) = self.accounts.get_mut(&tx.client) {
             if account.locked {
-                return Err(EngineError::AccountLocked.into());
+                return Err(EngineError::AccountLocked);
             }
             if let Some(mut original_tx) = self.transaction_log.get_mut(&tx.tx) {
                 let amount = Engine::check_transaction_semantic(tx, &original_tx)?;
@@ -505,10 +544,10 @@ impl EngineFunctions for Engine {
                 account.held = Engine::safe_add(&account.held, &amount)?;
                 original_tx.disputed = true;
             } else {
-                return Err(EngineError::TransactionNotFound.into());
+                return Err(EngineError::TransactionNotFound);
             }
         } else {
-            return Err(EngineError::AccountNotFound.into());
+            return Err(EngineError::AccountNotFound);
         }
         Ok(())
     }
@@ -520,16 +559,16 @@ impl EngineFunctions for Engine {
     ///
     /// # Returns
     /// - `Ok(())`: If the transaction is successfully processed.
-    /// - `Err(Box<dyn Error>)`: If the transaction is invalid or if the account is locked.
+    /// - `Err(EngineError)`: If the transaction is invalid or if the account is locked.
     ///
     /// # Errors
     /// - `TransactionNotFound`: If the transaction id is not found in the transaction log.
     /// - `AccountNotFound`: If the client id is not found in the accounts map.
     /// - `AccountLocked`: If the account is already locked.
-    fn process_resolve(&self, tx: &Transaction) -> Result<(), Box<dyn Error>> {
+    fn process_resolve(&self, tx: &Transaction) -> Result<(), EngineError> {
         if let Some(mut account) = self.accounts.get_mut(&tx.client) {
             if account.locked {
-                return Err(EngineError::AccountLocked.into());
+                return Err(EngineError::AccountLocked);
             }
             if let Some(mut original_tx) = self.transaction_log.get_mut(&tx.tx) {
                 let amount = Engine::check_transaction_semantic(tx, &original_tx)?;
@@ -537,10 +576,10 @@ impl EngineFunctions for Engine {
                 account.held = Engine::safe_sub(&account.held, &amount)?;
                 original_tx.disputed = false;
             } else {
-                return Err(EngineError::TransactionNotFound.into());
+                return Err(EngineError::TransactionNotFound);
             }
         } else {
-            return Err(EngineError::AccountNotFound.into());
+            return Err(EngineError::AccountNotFound);
         }
         Ok(())
     }
@@ -552,16 +591,16 @@ impl EngineFunctions for Engine {
     ///
     /// # Returns
     /// - `Ok(())`: If the transaction is successfully processed.
-    /// - `Err(Box<dyn Error>)`: If the transaction is invalid or if the account is locked.
+    /// - `Err(EngineError)`: If the transaction is invalid or if the account is locked.
     ///
     /// # Errors
     /// - `TransactionNotFound`: If the transaction id is not found in the transaction log.
     /// - `AccountNotFound`: If the client id is not found in the accounts map.
     /// - `AccountLocked`: If the account is already locked.
-    fn process_chargeback(&self, tx: &Transaction) -> Result<(), Box<dyn Error>> {
+    fn process_chargeback(&self, tx: &Transaction) -> Result<(), EngineError> {
         if let Some(mut account) = self.accounts.get_mut(&tx.client) {
             if account.locked {
-                return Err(EngineError::AccountLocked.into());
+                return Err(EngineError::AccountLocked);
             }
             if let Some(original_tx) = self.transaction_log.get(&tx.tx) {
                 let amount = Engine::check_transaction_semantic(tx, &original_tx)?;
@@ -569,10 +608,10 @@ impl EngineFunctions for Engine {
                 account.held = Engine::safe_sub(&account.held, &amount)?;
                 account.locked = true;
             } else {
-                return Err(EngineError::TransactionNotFound.into());
+                return Err(EngineError::TransactionNotFound);
             }
         } else {
-            return Err(EngineError::AccountNotFound.into());
+            return Err(EngineError::AccountNotFound);
         }
 
         Ok(())

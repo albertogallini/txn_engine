@@ -1,4 +1,5 @@
 /target
 *.pdf
-*.csv
 stress_test_results*
+/*.csv
+!*/**.csv

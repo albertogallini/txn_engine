@@ -561,7 +561,7 @@ fn test_from_csv_file_disputed() {
     let mut engine = Engine::default();
     let input_path = "tests/transactions_disputed.csv";
     match engine.read_and_process_csv_file(input_path) {
-        Ok(()) => println!("Transactions processed successfully"),
+        Ok(()) => {}
         Err(e) => println!(" Some error occurred while processing transactions: {}", e),
     }
 
@@ -697,6 +697,41 @@ fn test_from_csv_file_error_conditions() {
         }
     }
     assert_eq!(engine.accounts.len(), 4);
+}
+
+/// Tests that processing a CSV file with malformed records results in the expected errors.
+///
+/// Verifies that:
+/// 1. The `TransactionProcessingError::MultipleErrors` variant is returned.
+/// 2. The errors are correctly sorted alphabetically.
+/// 3. The accounts are correctly updated after the transactions are processed.
+#[test]
+fn test_from_csv_file_malformed() {
+    let mut engine = Engine::default();
+    let input_path = "tests/transactions_malformed.csv";
+    match engine.read_and_process_csv_file(input_path) {
+        Ok(()) => panic!("Expected an error, but got success"),
+        Err(TransactionProcessingError::MultipleErrors(errors)) => {
+            let expected_errors = vec![
+                "Error reading transaction record: CSV deserialize error: record 1 (line: 2, byte: 22): invalid digit found in string",
+                "Error reading transaction record: Unknown transaction type: deposi",
+                "Error reading transaction record: Unknown transaction type: witawal",
+                "Error processing Transaction { ty: Withdrawal, client: 1, tx: 3, amount: Some(5.0000), disputed: false }: Account not found",
+            ];
+
+            // Compare the sorted errors to ensure the order doesn't matter
+            let mut actual_errors = errors.clone();
+            actual_errors.sort();
+            let mut expected_errors_sorted = expected_errors;
+            expected_errors_sorted.sort();
+
+            assert_eq!(
+                actual_errors, expected_errors_sorted,
+                "Errors do not match expected errors"
+            );
+        }
+    }
+    assert_eq!(engine.accounts.len(), 1);
 }
 
 /// Tests loading transactions and accounts from CSV files into the `Engine`.

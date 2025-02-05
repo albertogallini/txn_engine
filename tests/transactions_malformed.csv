@@ -1,0 +1,6 @@
+type,client,tx,amount
+deposit,1,aaaaa,10.0000
+deposi,deposit2,2,20.0000
+withdrawal,1,3,5.0000
+witawal,2,hdr4,15.0000
+deposit,1,5,5.0000

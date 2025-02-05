@@ -164,6 +164,30 @@ I/O Error - deserialization of Engine internal state from a previous session dum
 - **EngineSerDeserError::InvalidDecimal**: Parsing error while reading a previous session csv -> InvalidDecimal
 - **EngineSerDeserError::InvalidDecimal**: Parsing error while reading a previous session csv -> InvalidBool
 
+when the `txn_engine` is excetued the errors are reported on the stderr in a way it is clear to understand which is the trasaction causing the issue. E.g.:
+```
+$ txn_engine % cargo run -- tests/transactions_errors.csv -dump > output.csv
+  
+Error: Some errors occurred while processing transactions:
+  - Error reading transaction record: Unknown transaction type: DEPOSIT
+  - Error processing Transaction { ty: Deposit, client: 6, tx: 9, amount: Some(0.0000), disputed: false }: Deposit amount must be greater than 0
+  - Error processing Transaction { ty: Withdrawal, client: 6, tx: 10, amount: Some(-5.0000), disputed: false }: Withdrawal amount must be greater than 0
+  - Error processing Transaction { ty: Deposit, client: 6, tx: 12, amount: Some(5000.0000), disputed: false }: Addition overflow
+  - Error processing Transaction { ty: Withdrawal, client: 6, tx: 13, amount: None, disputed: false }: Transaction must have an amount
+  - Error processing Transaction { ty: Deposit, client: 7, tx: 14, amount: None, disputed: false }: Transaction must have an amount
+  - Error processing Transaction { ty: Deposit, client: 7, tx: 15, amount: Some(10), disputed: false }: Transaction id already processed in this session - cannot be repeated.
+  - Error processing Transaction { ty: Dispute, client: 7, tx: 16, amount: None, disputed: false }: Transaction not found
+  - Error processing Transaction { ty: Resolve, client: 6, tx: 9999, amount: None, disputed: false }: Transaction not found
+  - Error processing Transaction { ty: Chargeback, client: 7, tx: 16, amount: None, disputed: false }: Transaction not found
+  - Error processing Transaction { ty: Dispute, client: 7, tx: 15, amount: None, disputed: false }: Transaction already disputed
+  - Error processing Transaction { ty: Deposit, client: 7, tx: 17, amount: Some(10), disputed: false }: Account is locked
+  - Error processing Transaction { ty: Resolve, client: 8, tx: 18, amount: None, disputed: false }: Transaction not disputed
+  - Error processing Transaction { ty: Withdrawal, client: 9, tx: 21, amount: Some(200), disputed: false }: Insufficient funds
+  - Error processing Transaction { ty: Dispute, client: 9, tx: 21, amount: None, disputed: false }: Transaction not found
+
+```
+
+
 #### Memory Efficiency
 The engine is designed to be memory efficient, processing transactions through buffering the input csv stream to ensure scalability even with large datasets. See `read_and_process_transactions` in `./src/utility.rs`
 
@@ -241,6 +265,8 @@ correct current status loading just the transactions of the current day. Which i
   - Extensibility: if you later decide to store or transmit data in a different format
   (like JSON for API responses, or binary formats for efficiency), Serde can handle these conversions
   without changing your core data structures. This makes your code more adaptable to changes in data storage or transmission methods
+
+  On a separate note: loading the previous session state is important to prevent duplicate transactions across sessions.
 
 ## Stress Test script & performance measure:
 
