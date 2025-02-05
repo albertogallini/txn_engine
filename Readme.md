@@ -68,7 +68,7 @@ Running Tests
 cargo test
 ```
 
-For stress testing suite to measure time and memory conumption:
+For stress testing suite to measure time and memory conumption (run `cargo build --release` first):
 
 ```sh
 ./stress-test.sh
