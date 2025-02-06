@@ -70,6 +70,29 @@ impl From<csv::Error> for EngineSerDeserError {
 }
 
 pub trait EngineFunctions {
+    fn read_and_process_transactions<R: Read>(
+        &self,
+        stream: R,
+        buffer_size: usize,
+    ) -> Result<(), TransactionProcessingError>;
+    fn read_and_process_transactions_from_csv(
+        &self,
+        input_path: &str,
+    ) -> Result<(), TransactionProcessingError>;
+    fn load_from_previous_session_csvs(
+        &self,
+        transactions_file: &str,
+        accounts_file: &str,
+    ) -> Result<(), EngineSerDeserError>;
+    fn dump_account_to_csv<W: Write>(&self, writer: W) -> Result<(), Box<dyn std::error::Error>>;
+    fn dump_transaction_log_to_csvs(
+        &self,
+        transactions_path: &str,
+    ) -> Result<(), EngineSerDeserError>;
+    fn size_of(&self) -> usize;
+}
+
+trait EngineStateTransitionFunctions {
     fn process_transaction(&self, tx: &Transaction) -> Result<(), EngineError>;
     fn process_deposit(&self, tx: &Transaction) -> Result<(), EngineError>;
     fn process_withdrawal(&self, tx: &Transaction) -> Result<(), EngineError>;
@@ -180,7 +203,9 @@ impl Engine {
     fn safe_sub(a: &Decimal, b: &Decimal) -> Result<Decimal, EngineError> {
         a.checked_sub(*b).ok_or(EngineError::SubtractionOverflow)
     }
+}
 
+impl EngineFunctions for Engine {
     /// Estimates the memory size of the `Engine` including all its data structures.
     ///
     /// This method provides an APPROXIMATE size in bytes since it can't account for
@@ -188,7 +213,7 @@ impl Engine {
     ///
     /// # Returns
     /// - `usize`: The estimated size in bytes.
-    pub fn size_of(&self) -> usize {
+    fn size_of(&self) -> usize {
         let mut size = std::mem::size_of_val(self);
 
         size += self.accounts.len()
@@ -212,8 +237,8 @@ impl Engine {
     /// - `Ok(())`: If all transactions are processed successfully.
     /// - `Err(TransactionProcessingError)`: If any errors occur while reading
     ///   from the file or processing transactions.
-    pub fn read_and_process_transactions_from_csv(
-        &mut self,
+    fn read_and_process_transactions_from_csv(
+        &self,
         input_path: &str,
     ) -> Result<(), TransactionProcessingError> {
         const BUFFER_SIZE: usize = 16_384;
@@ -239,7 +264,7 @@ impl Engine {
     /// # Returns
     /// - `Ok(())` if all transactions are processed without errors.
     /// - `Err(TransactionProcessingError)` if any errors occur during processing or reading.
-    pub fn read_and_process_transactions<R: Read>(
+    fn read_and_process_transactions<R: Read>(
         &self,
         stream: R,
         buffer_size: usize,
@@ -305,8 +330,8 @@ impl Engine {
     ///
     /// # Returns
     /// - `Result<(), EngineError>`: Ok if loading was successful, or an error if there were issues with file reading or parsing.
-    pub fn load_from_previous_session_csvs(
-        &mut self,
+    fn load_from_previous_session_csvs(
+        &self,
         transactions_path: &str,
         accounts_path: &str,
     ) -> Result<(), EngineSerDeserError> {
@@ -387,10 +412,7 @@ impl Engine {
     ///
     /// # Errors
     /// - `Box<dyn std::error::Error>` if any errors occur while writing to stdout.
-    pub fn dump_account_to_csv<W: Write>(
-        &self,
-        writer: W,
-    ) -> Result<(), Box<dyn std::error::Error>> {
+    fn dump_account_to_csv<W: Write>(&self, writer: W) -> Result<(), Box<dyn std::error::Error>> {
         let mut csv_writer = Writer::from_writer(writer);
         csv_writer.write_record(["client", "available", "held", "total", "locked"])?;
         csv_writer.flush()?; // Ensure the header is written before calling write_account_balances
@@ -409,7 +431,7 @@ impl Engine {
     /// # Returns
     /// - `Ok(())` if the transaction log is written to the file successfully.
     /// - `Err(EngineError)` if there is an error writing to the file.
-    pub fn dump_transaction_log_to_csvs(
+    fn dump_transaction_log_to_csvs(
         &self,
         transactions_path: &str,
     ) -> Result<(), EngineSerDeserError> {
@@ -427,7 +449,7 @@ impl Engine {
     }
 }
 
-impl EngineFunctions for Engine {
+impl EngineStateTransitionFunctions for Engine {
     /// Process a transaction. This function is a dispatch to the correct processing function
     /// for the given transaction type.
     fn process_transaction(&self, tx: &Transaction) -> Result<(), EngineError> {

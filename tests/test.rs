@@ -4,7 +4,7 @@ use std::fs::File;
 use std::str::FromStr;
 use txn_engine::datastr::account::serialize_account_balances_csv;
 use txn_engine::datastr::transaction::{TransactionProcessingError, TransactionType};
-use txn_engine::engine::Engine;
+use txn_engine::engine::{Engine, EngineFunctions};
 use txn_engine::utility::generate_deposit_withdrawal_transactions;
 
 use std::io::Write;
@@ -20,7 +20,7 @@ fn unit_test_deposit_and_withdrawal() {
     write!(temp_file, "{}", csv_content).unwrap();
     let input_path = temp_file.path().to_str().unwrap();
 
-    let mut engine = Engine::default();
+    let engine = Engine::default();
     match engine.read_and_process_transactions_from_csv(input_path) {
         Ok(()) => {}
         Err(e) => eprintln!(" Some error occurred while processing transactions: {}", e),
@@ -57,7 +57,7 @@ fn unit_test_deposit_and_dispute() {
     write!(temp_file, "{}", csv_content).unwrap();
     let input_path = temp_file.path().to_str().unwrap();
 
-    let mut engine = Engine::default();
+    let engine = Engine::default();
     match engine.read_and_process_transactions_from_csv(input_path) {
         Ok(()) => {}
         Err(e) => eprintln!(" Some error occurred while processing transactions: {}", e),
@@ -94,7 +94,7 @@ fn unit_test_dispute_deposit_after_withdrawal() {
     write!(temp_file, "{}", csv_content).unwrap();
     let input_path = temp_file.path().to_str().unwrap();
 
-    let mut engine = Engine::default();
+    let engine = Engine::default();
     match engine.read_and_process_transactions_from_csv(input_path) {
         Ok(()) => {}
         Err(e) => eprintln!(" Some error occurred while processing transactions: {}", e),
@@ -134,7 +134,7 @@ fn unit_test_deposit_and_dispute_resolve() {
     write!(temp_file, "{}", csv_content).unwrap();
     let input_path = temp_file.path().to_str().unwrap();
 
-    let mut engine = Engine::default();
+    let engine = Engine::default();
     match engine.read_and_process_transactions_from_csv(input_path) {
         Ok(()) => {}
         Err(e) => eprintln!(" Some error occurred while processing transactions: {}", e),
@@ -170,7 +170,7 @@ fn unit_test_deposit_and_dispute_chargeback() {
     write!(temp_file, "{}", csv_content).unwrap();
     let input_path = temp_file.path().to_str().unwrap();
 
-    let mut engine = Engine::default();
+    let engine = Engine::default();
     match engine.read_and_process_transactions_from_csv(input_path) {
         Ok(()) => {}
         Err(e) => eprintln!(" Some error occurred while processing transactions: {}", e),
@@ -210,7 +210,7 @@ fn unit_test_deposit_withdrawal_dispute_withdrawal() {
     write!(temp_file, "{}", csv_content).unwrap();
     let input_path = temp_file.path().to_str().unwrap();
 
-    let mut engine = Engine::default();
+    let engine = Engine::default();
     match engine.read_and_process_transactions_from_csv(input_path) {
         Ok(()) => {}
         Err(e) => eprintln!(" Some error occurred while processing transactions: {}", e),
@@ -245,7 +245,7 @@ fn unit_test_deposit_withdrawal_too_much() {
     write!(temp_file, "{}", csv_content).unwrap();
     let input_path = temp_file.path().to_str().unwrap();
 
-    let mut engine = Engine::default();
+    let engine = Engine::default();
 
     match engine.read_and_process_transactions_from_csv(input_path) {
         Ok(()) => panic!("Engine::read_and_process_transactions_from_csv is expeceted to fail"),
@@ -285,7 +285,7 @@ fn unit_test_deposit_negative() {
     write!(temp_file, "{}", csv_content).unwrap();
     let input_path = temp_file.path().to_str().unwrap();
 
-    let mut engine = Engine::default();
+    let engine = Engine::default();
 
     match engine.read_and_process_transactions_from_csv(input_path) {
         Ok(()) => panic!("Engine::read_and_process_transactions_from_csv is expeceted to fail"),
@@ -327,7 +327,7 @@ fn unit_test_withdrawal_negative() {
     write!(temp_file, "{}", csv_content).unwrap();
     let input_path = temp_file.path().to_str().unwrap();
 
-    let mut engine = Engine::default();
+    let engine = Engine::default();
 
     match engine.read_and_process_transactions_from_csv(input_path) {
         Ok(()) => panic!("Engine::read_and_process_transactions_from_csv is expeceted to fail"),
@@ -369,7 +369,7 @@ fn unit_test_withdrawal_from_zero() {
     write!(temp_file, "{}", csv_content).unwrap();
     let input_path = temp_file.path().to_str().unwrap();
 
-    let mut engine = Engine::default();
+    let engine = Engine::default();
     match engine.read_and_process_transactions_from_csv(input_path) {
         Ok(()) => panic!("Engine::read_and_process_transactions_from_csv is expeceted to fail"),
         Err(e) => {
@@ -419,7 +419,7 @@ fn unit_test_addition_overflow() {
     write!(temp_file, "{}", csv_content).unwrap();
     let input_path = temp_file.path().to_str().unwrap();
 
-    let mut engine = Engine::default();
+    let engine = Engine::default();
 
     match engine.read_and_process_transactions_from_csv(input_path) {
         Ok(()) => {
@@ -482,7 +482,7 @@ fn unit_test_decimal_precision() {
     write!(temp_file, "{}", csv_content).unwrap();
     let input_path = temp_file.path().to_str().unwrap();
 
-    let mut engine = Engine::default();
+    let engine = Engine::default();
     match engine.read_and_process_transactions_from_csv(input_path) {
         Ok(()) => panic!("Engine::read_and_process_transactions_from_csv is expeceted to fail"),
         Err(e) => {
@@ -511,7 +511,7 @@ fn unit_test_decimal_precision() {
 ///
 #[test]
 fn test_from_csv_file_basic() {
-    let mut engine = Engine::default();
+    let engine = Engine::default();
     let input_path = "tests/transactions_basic.csv";
     match engine.read_and_process_transactions_from_csv(input_path) {
         Ok(()) => println!("Transactions processed successfully"),
@@ -560,7 +560,7 @@ fn test_from_csv_file_basic() {
 /// after the dispute and chargeback transactions are processed.
 #[test]
 fn test_from_csv_file_disputed() {
-    let mut engine = Engine::default();
+    let engine = Engine::default();
     let input_path = "tests/transactions_disputed.csv";
     match engine.read_and_process_transactions_from_csv(input_path) {
         Ok(()) => {}
@@ -663,7 +663,7 @@ fn test_from_csv_file_disputed() {
 /// The test checks that the correct errors are reported.
 ///
 fn test_from_csv_file_error_conditions() {
-    let mut engine = Engine::default();
+    let engine = Engine::default();
     let input_path = "tests/transactions_errors.csv";
     match engine.read_and_process_transactions_from_csv(input_path) {
         Ok(()) => panic!("Expected an error, but got success"),
@@ -709,7 +709,7 @@ fn test_from_csv_file_error_conditions() {
 /// 3. The accounts are correctly updated after the transactions are processed.
 #[test]
 fn test_from_csv_file_malformed() {
-    let mut engine = Engine::default();
+    let engine = Engine::default();
     let input_path = "tests/transactions_malformed.csv";
     match engine.read_and_process_transactions_from_csv(input_path) {
         Ok(()) => panic!("Expected an error, but got success"),
@@ -776,7 +776,7 @@ fn test_load_from_previous_session_csv() {
         .unwrap();
 
     // Create an instance of Engine
-    let mut engine = Engine::new();
+    let engine = Engine::new();
 
     // Load data from CSV files
     engine
@@ -852,7 +852,7 @@ fn test_subrtaction_overflow() {
     write!(accounts_file, "{}", csv_content).unwrap();
 
     // Create an instance of Engine
-    let mut engine = Engine::new();
+    let engine = Engine::new();
 
     // Load data from CSV files
     engine
@@ -899,7 +899,7 @@ fn test_subrtaction_overflow() {
 /// account details.
 #[test]
 fn test_serdesr_engine() {
-    let mut engine = Engine::default();
+    let engine = Engine::default();
     let input_path = "tests/transactions_mixed.csv";
     match engine.read_and_process_transactions_from_csv(input_path) {
         Ok(()) => println!("Transactions processed successfully"),
@@ -927,7 +927,7 @@ fn test_serdesr_engine() {
         writer.flush().unwrap();
         let _ = serialize_account_balances_csv(&engine.accounts, &accounts_file);
 
-        let mut engine2 = Engine::default();
+        let engine2 = Engine::default();
         // Deserialize transactions from temp file into engine2
         match engine2.load_from_previous_session_csvs(
             transactions_file.path().to_str().unwrap(),

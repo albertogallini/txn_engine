@@ -123,18 +123,26 @@ This project consists of a set of key components, each responsible for different
   - The Engine internal state is handled by two DashMaps `accounts` and `transaction_log`. When considering DashMap, operations like insertion, lookup, and removal are generally O(1) in terms of time complexity, thanks to its concurrent hash map implementation. However, under heavy contention or in worst-case scenarios, performance can degrade due to the lock mechanism. See <i>Concurrency Management</i> section.
   - CSV Operations: File I/O operations can introduce variability due to disk I/O, but from an algorithmic standpoint, reading or writing each record is considered O(1) per operation.
 
-- `EngineFunctions` trait
+- `EngineFunctions` and `EngineStateTransitionFunctions` trait
 
-  - The EngineFunctions trait provides a set of functions that can be called on the Engine struct. These functions allow clients to interact with the Engine and perform operations such as:
+  - The `EngineStateTransitionFunctions` trait provides a set of functions that can be called on the `Engine` struct internally. These functions are not public and  allow clients to interact with the Engine and perform operations such as:
+    - **process_transaction**: To handle common actions across all the transactions type and dispach to specifc methods.
+    - **deposit**: Deposits a certain amount of funds into a client's account.
+    - **withdraw**: Withdraws a certain amount of funds from a client's account. 
+    - **dispute**: Disputes a transaction marking it as `disputed`. 
+    - **resolve**: Resolves a dispute, releasing the `disputed` transaction. 
+    - **chargeback**: Reverses a disputed transaction, effectively removing the associated funds from the client's account and locking the account.
 
-    - **deposit**: Deposits a certain amount of funds into a client's account. Implemented by Engine as a call to `process_transaction` with the `Deposit` transaction type.
-    - **withdraw**: Withdraws a certain amount of funds from a client's account. Implemented by Engine as a call to `process_transaction` with the `Withdrawal` transaction type.
-    - **dispute**: Disputes a transaction marking it as `disputed`. Implemented by Engine as a call to `process_transaction` with the `Dispute` transaction type.
-    - **resolve**: Resolves a dispute, releasing the `disputed` transaction. Implemented by Engine as a call to `process_transaction` with the `Resolve` transaction type.
-    - **chargeback**: Reverses a disputed transaction, effectively removing the associated funds from the client's account and locking the account. Implemented by Engine as a call to `process_transaction` with the `Chargeback` transaction type.
+  - The `EngineFunctions` trait provides the following public methods to interact with the Engine and operate on the internal state:
+    - **`read_and_process_transactions_from_csv`**: Reads transactions from a CSV file and processes them using the Engine.
+    - **`load_from_previous_session_csvs`**: Loads transactions and accounts from CSV files dumped from a previous session to populate the internal maps.
+    - **`dump_transaction_log_to_csvs`**: Dumps the `transaction_log` to a CSV file.
+    - **`dump_account_to_csv`**: Outputs the final state of all accounts to a CSV file after processing is complete.
+
+The separation of public and private functions in the `Engine` struct is achieved using two distinct traits: `EngineFunctions` for public APIs and `EngineStateTransitionFunctions` for internal state management, which enhances clarity, reduces complexity, and improves security by preventing unintended modifications.
 
 Here below a simplified diagram of the main structs and relationships:<br>
-<img src="./img/scheme.jpg" width="500">
+<img src="./img/scheme.png" width="500">
 
 
 ### Error Handling
@@ -325,3 +333,6 @@ Comments:
 -  Errors are **not** returned to stderr in stress-test (`process_stress_test`) mode. However, in a common use case, where transactions are not generated randomly, the error rate is much lower, so this should not affect the reliability of the measurements.
    Additionally, stderr can be redirected to memory (`$()` in a shell script) or to a file in normal (`process_normal`) mode.
 -  So it is legitimate to have a big discrepancy for the #transaction/MB estimate Process Memory vs Engine Memory, but the fact that it is ~constant over time respect to the process memory footprint suggests the implementation of txn_engine does not degrade with input size.
+
+## Regression and Unit Tests
+TODO.

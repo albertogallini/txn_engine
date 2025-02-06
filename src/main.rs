@@ -5,7 +5,7 @@ use chrono::{DateTime, Utc};
 use sysinfo::System;
 
 use tempfile::NamedTempFile;
-use txn_engine::engine::Engine;
+use txn_engine::engine::{Engine, EngineFunctions};
 use txn_engine::utility::{generate_random_transactions, get_current_memory};
 
 /// Entry point of the application. Parses command-line arguments to determine the mode of operation
@@ -96,7 +96,7 @@ fn process_normal(
 /// - The temporary file is automatically deleted when the function returns.
 /// - The performance metrics are printed to stderr.
 fn process_stress_test(num_transactions: usize) -> Result<(), Box<dyn std::error::Error>> {
-    let mut engine = Engine::default();
+    let engine = Engine::default();
     let start_time = Instant::now();
     let mut system = System::new_all();
     let start_memory = get_current_memory(&mut system);
