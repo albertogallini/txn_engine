@@ -98,7 +98,6 @@ This project consists of several key components, each responsible for different 
 - **`main`**: Parses arguments, distinguishes between `normal processing` and `stress testing`.
 - **`process_normal`**: Processes transactions from a provided CSV file and updates account states accordingly.
 - **`process_stress_test`**: Handles stress testing by processing a large number of generated transactions and measuring performance metrics.
-- **`output_results`**: Outputs the final state of all accounts to a CSV file after processing is complete.
 
 #### utility.rs 
 
@@ -113,10 +112,11 @@ This project consists of several key components, each responsible for different 
 - **`safe_add` / `safe_sub`**: Performs arithmetic operations safely, preventing overflow errors. <i>**Complexity: `O(1)`**</i>
 - **`process_transaction`**: Dispatches a transaction to the appropriate processing function based on its type.<i>**Complexity: `O(1)`**</i>
 - **`size_of`**: Estimates the memory usage of the engine and its data structures.<i>**Complexity: `O(1)`**</i>
-- **`read_and_process_csv_file`**: Reads transactions from a CSV file and use the Engine instane passed as input parameter to processes them. It calls `read_and_process_transactions`.
-- **`read_and_process_transactions`**: Reads transactions from a CSV file and dispatches them for processing by the engine.<i>**Complexity: `O(n)`**</i>
+- **`read_and_process_transactions_from_csv`**: Reads transactions from a CSV file and use the Engine instane passed as input parameter to processes them. It calls `read_and_process_transactions`.
+- **`read_and_process_transactions`**: Reads transactions from a input stream and dispatches them for processing by the engine.<i>**Complexity: `O(n)`**</i>
 - **`load_from_previous_session_csvs`**: Loads transactions (cardinality n) and accounts (cardinality m) from CSV files dumped from a previous session to populate the internal maps.<i>**Complexity: `O(n+m)`**</i> 
 - **`dump_transaction_log_to_csvs`**: Dumps the `transaction_log` to a CSV file. <i>**Complexity: `O(n)`**</i>
+- **`dump_account_to_csv`**: Outputs the final state of all accounts to a CSV file after processing is complete.
 
 General Notes about Complexity Analysis:
 - The complexity analysis on the `Engine` is exhaustive to evaluate the `txn_engine` process as it includes all the core functionalities.
@@ -287,17 +287,27 @@ Note: The `generate_random_transactions` function is not meant to mimic real-wor
 Example of output on Mac-Book M3 24 Gb :
 ```
 Transactions Count   Time                 Process Memory (MB)  Engine Memory (MB)  
-100                  12.415125ms          0.344                0.001               
-100100               184.069ms            13.000               1.250               
-200100               341.112375ms         16.875               2.505               
-300100               518.024ms            25.141               3.734               
-400100               811.506709ms         24.219               2.314               
-500100               964.680375ms         41.125               3.919               
-600100               1.25693025s          39.625               2.065               
-700100               1.324102583s         39.656               6.174               
-800100               1.528267083s         51.016               7.493               
-900100               1.86784925s          55.781               4.246               
-1000100              2.015164458s         59.672               4.988                      
+100                  9.949375ms           0.141                0.001               
+100100               110.298375ms         9.078                1.252               
+200100               202.647959ms         18.156               2.504               
+300100               308.25525ms          17.578               3.752               
+400100               401.858917ms         24.156               4.782               
+500100               503.560583ms         38.375               5.471               
+600100               634.479958ms         38.109               5.790               
+700100               742.610458ms         46.703               4.517               
+800100               856.854917ms         43.438               3.636               
+900100               997.829041ms         44.938               1.699               
+1000100              1.105896042s         53.766               5.209               
+1100100              1.202280958s         52.812               4.642               
+1200100              1.338591125s         76.266               4.479               
+1300100              1.48892125s          64.578               4.313               
+1400100              1.610724209s         73.094               5.745               
+1500100              1.736744167s         83.031               4.453               
+1600100              1.853796375s         76.062               5.273               
+1700100              1.9928745s           84.266               6.289               
+1800100              2.1047665s           76.203               3.718               
+1900100              2.179973s            91.250               5.059               
+2000100              2.275930042s         96.062               5.109                       
          
 ```
 <img src="./img/time_vs_transactions.png" width="500">
@@ -305,16 +315,14 @@ Transactions Count   Time                 Process Memory (MB)  Engine Memory (MB
 <img src="./img/memory_vs_transactions_ratios.png" width="500">
 
 
-So overall performance of txn_engine, on the aformenthioned assumption, on this machine is `~500.000 transactions/s`  with a avg `~[15.000 (Process Memory) - 150.000 (Engine Memory)] transation/Mb` memory impact on the user account/transaction log storage.
+So overall performance of txn_engine, on the aformenthioned assumption, on this machine is ~`1.000.000 transactions/s`  with a avg `~[217.000 (Process Memory) - 230.000 (Engine Memory)] transation/Mb` memory impact on the user account/transaction log storage.
 The plots also show that both time and memory scale as O(n).<br><br>
 Comments:
 -  Read the comment of `Engine.size_of` function to see how the Engine Memory is computed. The Engine size does not take into account the data structure overhead.
+-  As the transactions are generated randomly, the error rate can be quite high, which affects the size of the maps. This also may cause lower map sizes for a larger number of input transactions.
 -  The Process Memory takes into account the entire process memory footprint, including the Rust runtime and the memory allocation for the I/O and other data structures: this explains the big difference with the Engine memory measures.
 -  The Process Memory is controlled by the runtime and the OS, so it is more volatile.
 -  The Engine Memory is not only dependent on the number of input transactions but also by the amount of errors (e.g. too big withdrawal or dispute on invalid tx id) that affects the Engine internal maps size.
+-  Errors are not returned to stderr in `stress-test` mode. However, in a normal use case where transactions are not generated randomly, the error rate is much lower, so this should not affect the reliability of the measurements.
+   Additionally, stderr can be redirected to memory (`$()` in a shell script) or to a file in normal mode.
 -  So it is legitimate to have a big discrepancy for the #transaction/MB estimate Process Memory vs Engine Memory, but the fact that it is ~constant over time respect to the process memory footprint suggests the implementation of txn_engine does not degrade with input size.
-
-NOTE: the shell script uses `output=$(./target/release/txn_engine stress-test $formatted_i 2>&1)` which  captures the output in memory (using $()) before writing to files.
-Output redirection here happens in memory first this is  more efficient than direct file I/O like that happens when using the command directly `./target/release/txn_engine  stress-test 2000000 > accounts.csv 2>&1`
-especially when large amounts of data (errors and account dump) is generated.
-

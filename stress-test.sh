@@ -7,7 +7,7 @@ output_file="stress_test_results.txt"
 > "$output_file"
 
 # Loop through transaction counts using seq for the range
-for i in $(seq 100 100000 1000100); do
+for i in $(seq 100 100000 2000100); do
     # Format the number as an integer
     formatted_i=$(printf "%.0f" $i)
     

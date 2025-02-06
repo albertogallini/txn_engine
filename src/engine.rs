@@ -69,12 +69,6 @@ impl From<csv::Error> for EngineSerDeserError {
     }
 }
 
-#[derive(Default)]
-pub struct Engine {
-    pub accounts: DashMap<ClientId, Account>,
-    pub transaction_log: DashMap<TxId, Transaction>,
-}
-
 pub trait EngineFunctions {
     fn process_transaction(&self, tx: &Transaction) -> Result<(), EngineError>;
     fn process_deposit(&self, tx: &Transaction) -> Result<(), EngineError>;
@@ -82,6 +76,12 @@ pub trait EngineFunctions {
     fn process_dispute(&self, tx: &Transaction) -> Result<(), EngineError>;
     fn process_resolve(&self, tx: &Transaction) -> Result<(), EngineError>;
     fn process_chargeback(&self, tx: &Transaction) -> Result<(), EngineError>;
+}
+
+#[derive(Default)]
+pub struct Engine {
+    pub accounts: DashMap<ClientId, Account>,
+    pub transaction_log: DashMap<TxId, Transaction>,
 }
 
 impl Engine {
@@ -200,20 +200,23 @@ impl Engine {
         size
     }
 
-    /// Reads transactions from a CSV file and processes them.
+    /// Reads transactions from a CSV file and processes them in batches.
+    ///
+    /// The transactions are read from the file in chunks of `BUFFER_SIZE` and processed
+    /// by calling `read_and_process_transactions` on the `Engine` instance.
     ///
     /// # Parameters
-    /// - `engine`: The Engine instance to process transactions with.
-    /// - `input_path`: The path to the CSV file to read transactions from.
+    /// - `input_path`: The path to the CSV file to read from.
     ///
     /// # Returns
-    /// - `Ok(())` if all transactions are processed without errors.
-    /// - `Err(TransactionProcessingError)` if any errors occur during processing or reading.
-    pub fn read_and_process_csv_file(
+    /// - `Ok(())`: If all transactions are processed successfully.
+    /// - `Err(TransactionProcessingError)`: If any errors occur while reading
+    ///   from the file or processing transactions.
+    pub fn read_and_process_transactions_from_csv(
         &mut self,
         input_path: &str,
     ) -> Result<(), TransactionProcessingError> {
-        const BATCH_SIZE: usize = 16_384;
+        const BUFFER_SIZE: usize = 16_384;
 
         let file = File::open(input_path).map_err(|e| {
             TransactionProcessingError::MultipleErrors(vec![format!("Error opening file: {}", e)])
@@ -221,7 +224,7 @@ impl Engine {
         let reader = BufReader::new(file);
 
         // Call the method from the Engine struct
-        self.read_and_process_transactions(reader, BATCH_SIZE)
+        self.read_and_process_transactions(reader, BUFFER_SIZE)
     }
 
     /// Reads transactions from a stream in chunk and processes them.
@@ -236,14 +239,11 @@ impl Engine {
     /// # Returns
     /// - `Ok(())` if all transactions are processed without errors.
     /// - `Err(TransactionProcessingError)` if any errors occur during processing or reading.
-    pub fn read_and_process_transactions<R>(
+    pub fn read_and_process_transactions<R: Read>(
         &self,
         stream: R,
         buffer_size: usize,
-    ) -> Result<(), TransactionProcessingError>
-    where
-        R: Read,
-    {
+    ) -> Result<(), TransactionProcessingError> {
         let reader = BufReader::with_capacity(buffer_size, stream);
 
         let mut csv_reader = ReaderBuilder::new().has_headers(true).from_reader(reader);
@@ -297,7 +297,7 @@ impl Engine {
     ///
     /// NOTE: This function is very naive and does NOT perform any semantic/consistency check on the input data
     ///       so bad or inconsistent account/transaction_log can be effectively created.
-    ///       !!  -- This function is very dangerous and must be used only on verified input files.  -- !!
+    ///       !!  -- This function is meant to be used only on verified input files.  -- !!
     ///
     /// # Parameters
     /// - `transactions_path`: Path to the CSV file containing transactions.
@@ -387,15 +387,14 @@ impl Engine {
     ///
     /// # Errors
     /// - `Box<dyn std::error::Error>` if any errors occur while writing to stdout.
-    pub fn output_results<W: Write>(
+    pub fn dump_account_to_csv<W: Write>(
         &self,
         writer: W,
-        engine: &Engine,
     ) -> Result<(), Box<dyn std::error::Error>> {
         let mut csv_writer = Writer::from_writer(writer);
         csv_writer.write_record(["client", "available", "held", "total", "locked"])?;
         csv_writer.flush()?; // Ensure the header is written before calling write_account_balances
-        serialize_account_balances_csv(&engine.accounts, std::io::stdout())
+        serialize_account_balances_csv(&self.accounts, std::io::stdout())
     }
 
     /// Dumps the transaction log to a CSV file.

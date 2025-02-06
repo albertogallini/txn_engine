@@ -64,12 +64,12 @@ fn process_normal(
     input_path: &str,
     should_dump: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    match engine.read_and_process_csv_file(input_path) {
+    match engine.read_and_process_transactions_from_csv(input_path) {
         Ok(()) => {}
         Err(e) => eprintln!("Error: {}", e),
     }
 
-    engine.output_results(std::io::stdout(), engine)?;
+    engine.dump_account_to_csv(std::io::stdout())?;
 
     if should_dump {
         let now: DateTime<Utc> = Utc::now();
@@ -107,10 +107,11 @@ fn process_stress_test(num_transactions: usize) -> Result<(), Box<dyn std::error
     generate_random_transactions(num_transactions, &temp_file)?;
 
     // Process transactions directly from the temporary file
-    match engine.read_and_process_csv_file(temp_file.path().to_str().unwrap()) {
-        Ok(()) => {}
-        Err(e) => eprintln!("Error during stress test: {}", e),
-    }
+    // Error are not printed on the stderr during the stress test as it may affect the performance of the engine
+    // especially when the transactions are generated randomly and the error rate is is very high
+    if let Ok(()) =
+        engine.read_and_process_transactions_from_csv(temp_file.path().to_str().unwrap())
+    {}
 
     {
         // let's measure the resoruces before creating the dump to properly measure the engine performance:
@@ -124,7 +125,7 @@ fn process_stress_test(num_transactions: usize) -> Result<(), Box<dyn std::error
         eprintln!("Memory consumption delta: {:.3} MB", memory_delta_mb);
     }
 
-    engine.output_results(std::io::stdout(), &engine)?;
+    engine.dump_account_to_csv(std::io::stdout())?;
 
     Ok(())
 }
