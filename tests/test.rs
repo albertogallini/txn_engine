@@ -109,17 +109,66 @@ fn unit_test_dispute_deposit_after_withdrawal() {
     assert_eq!(
         account.total,
         Decimal::from_str("10.0000").unwrap(),
-        "Total should be 10 after failed withdrawal attempt"
+        "Total should be 10 after failed withdrawal"
     );
     assert_eq!(
         account.available,
         Decimal::from_str("-10.0000").unwrap(),
-        "Available should be -10 after failed withdrawal attempt"
+        "Available should be -10 after failed withdrawal and dispute"
     );
     assert_eq!(
         account.held,
         Decimal::from_str("20.0000").unwrap(),
-        "Held should be 20"
+        "Held should be 20 after dispute"
+    );
+}
+
+#[test]
+fn unit_test_txid_reused_after_dispute_and_resolve() {
+    let mut temp_file = NamedTempFile::new().unwrap();
+    let csv_content = r#"type,client,tx,amount,\n
+                                deposit,1,1,10.0000,\n
+                                deposit,1,2,20.0000,\n
+                                dispute,1,2,,\n#
+                                resolve,1,2,,\n
+                                deposit,1,2,20.0000,\n"#;
+
+    write!(temp_file, "{}", csv_content).unwrap();
+    let input_path = temp_file.path().to_str().unwrap();
+
+    let engine = Engine::default();
+    match engine.read_and_process_transactions_from_csv(input_path) {
+        Ok(()) => {
+            panic!("Engine::unit_test_txid_reused_after_dispute_and_resolve is expeceted to fail");
+        }
+        Err(e) => {
+            assert!(
+            e.to_string().contains("{ ty: Deposit, client: 1, tx: 2, amount: Some(20.0000), disputed: false }: Transaction id already processed in this session - cannot be repeated"),
+            "Expected `ty: Deposit, client: 1, tx: 2, amount: Some(20.0000), disputed: false : Transaction id already processed in this session - cannot be repeated` error"
+        );
+        }
+    }
+
+    assert_eq!(
+        engine.accounts.len(),
+        1,
+        "Account should exist even if zero balance"
+    );
+    let account = engine.accounts.get(&1).expect("Account 1 should exist");
+    assert_eq!(
+        account.total,
+        Decimal::from_str("30.0000").unwrap(),
+        "Total should be 30"
+    );
+    assert_eq!(
+        account.available,
+        Decimal::from_str("30.0000").unwrap(),
+        "Available should be 30"
+    );
+    assert_eq!(
+        account.held,
+        Decimal::from_str("0.0000").unwrap(),
+        "Held should be 0"
     );
 }
 
@@ -504,13 +553,88 @@ fn unit_test_decimal_precision() {
     assert_eq!(account.held, Decimal::from_str("0.0000").unwrap());
 }
 
+/// Tests the handling of subtraction overflow during transaction processing.
+///
+/// This test simulates a scenario where a dispute transaction causes a subtraction
+/// overflow. It creates temporary CSV files for transactions and accounts dumps, loads them
+/// into an `Engine` instance, and then processes a transaction that should trigger
+/// a subtraction overflow error.
+/// This is necessary as the engine cannot generate a status on the Engine such that a
+/// transaction can generate a subtraction overflow just processing transactions. So we need to populate the Engine state
+/// from an ad-hoc "corrupted" input file.
+///
+/// The test expects the `Engine::read_and_process_transactions_from_csv` function to return an error
+/// indicating a `Subtraction overflow`. If no error occurs or a different error
+/// is returned, the test will fail.
+#[test]
+fn unit_test_subrtaction_overflow() {
+    // Create temporary files for transactions and accounts
+    let mut transactions_file = NamedTempFile::new().expect("Failed to create temporary file");
+    let mut accounts_file = NamedTempFile::new().expect("Failed to create temporary file");
+
+    // Write transaction data
+    transactions_file
+        .write_all(
+            b"type,client,tx,amount\n
+                                        deposit,1,1,10.0000\n
+                                        deposit,2,2,5.0000\n
+                                        deposit,3,3,100.0000\n
+                                        withdrawal,1,4,5.0000",
+        )
+        .unwrap();
+
+    let large_neg_amount = (Decimal::MIN + Decimal::from(1)).to_string();
+    let csv_content = format!(
+        r#"client,available,held,total,locked,\n
+        1,5.0000,0.0000,5.0000,false,\n
+        2,5.0000,0.0000,5.0000,false,\n
+        3,{},{},{},false,\n"#,
+        large_neg_amount, large_neg_amount, large_neg_amount
+    );
+
+    // Write account data
+    write!(accounts_file, "{}", csv_content).unwrap();
+
+    // Create an instance of Engine
+    let engine = Engine::new();
+
+    // Load data from CSV files
+    engine
+        .load_from_previous_session_csvs(
+            transactions_file.path().to_str().unwrap(),
+            accounts_file.path().to_str().unwrap(),
+        )
+        .expect("Failed to load from CSV");
+
+    let mut temp_file = NamedTempFile::new().unwrap();
+    let csv_content = format!(
+        r#"type,client,tx,amount,\n
+           dispute,3,3,,\n"#
+    );
+    write!(temp_file, "{}", csv_content).unwrap();
+    let input_path = temp_file.path().to_str().unwrap();
+
+    match engine.read_and_process_transactions_from_csv(input_path) {
+        Ok(()) => {
+            panic!("Engine::read_and_process_transactions_from_csv should fail due to overflow")
+        }
+        Err(e) => {
+            println!("{}", e.to_string());
+            assert!(
+                e.to_string().contains("Subtraction overflow"),
+                "Expected `Subtraction overflow` error"
+            );
+        }
+    }
+}
+
 /// Test that transactions are processed correctly from a CSV file.
 ///
 /// The CSV file `tests/transactions_basic.csv` contains three deposits and two withdrawal.
 /// After processing, the Engine should have two accounts with the correct total and available funds.
 ///
 #[test]
-fn test_from_csv_file_basic() {
+fn reg_test_from_csv_file_basic() {
     let engine = Engine::default();
     let input_path = "tests/transactions_basic.csv";
     match engine.read_and_process_transactions_from_csv(input_path) {
@@ -559,7 +683,7 @@ fn test_from_csv_file_basic() {
 /// and chargeback transactions. This test checks that the accounts are correctly updated
 /// after the dispute and chargeback transactions are processed.
 #[test]
-fn test_from_csv_file_disputed() {
+fn reg_test_from_csv_file_disputed() {
     let engine = Engine::default();
     let input_path = "tests/transactions_disputed.csv";
     match engine.read_and_process_transactions_from_csv(input_path) {
@@ -658,11 +782,11 @@ fn test_from_csv_file_disputed() {
 /// resolve    ,8     ,18   ,              # Transaction not disputed
 ///
 /// deposit    ,9     ,20  ,100
-/// withdrawal ,9     ,21  ,200            # Insufficient funds : the transaction does NOT gets into the transaaction log.
+/// withdrawal ,9     ,21  ,200            # Insufficient funds : the transaction does NOT gets into the transaction log.
 /// dispute    ,9     ,21  ,               # Dispute on non-existent or invalid tx
 /// The test checks that the correct errors are reported.
 ///
-fn test_from_csv_file_error_conditions() {
+fn reg_test_from_csv_file_error_conditions() {
     let engine = Engine::default();
     let input_path = "tests/transactions_errors.csv";
     match engine.read_and_process_transactions_from_csv(input_path) {
@@ -708,7 +832,7 @@ fn test_from_csv_file_error_conditions() {
 /// 2. The errors are correctly sorted alphabetically.
 /// 3. The accounts are correctly updated after the transactions are processed.
 #[test]
-fn test_from_csv_file_malformed() {
+fn reg_test_from_csv_file_malformed() {
     let engine = Engine::default();
     let input_path = "tests/transactions_malformed.csv";
     match engine.read_and_process_transactions_from_csv(input_path) {
@@ -751,7 +875,7 @@ fn test_from_csv_file_malformed() {
 /// - The accounts map contains two accounts with expected balances and states.
 
 #[test]
-fn test_load_from_previous_session_csv() {
+fn reg_test_load_from_previous_session_csv() {
     // Create temporary files for transactions and accounts
     let mut transactions_file = NamedTempFile::new().expect("Failed to create temporary file");
     let mut accounts_file = NamedTempFile::new().expect("Failed to create temporary file");
@@ -809,81 +933,6 @@ fn test_load_from_previous_session_csv() {
     assert!(!account.locked);
 }
 
-/// Tests the handling of subtraction overflow during transaction processing.
-///
-/// This test simulates a scenario where a dispute transaction causes a subtraction
-/// overflow. It creates temporary CSV files for transactions and accounts, loads them
-/// into an `Engine` instance, and then processes a transaction that should trigger
-/// a subtraction overflow error.
-/// This is necessary as the engine cannot generate a status on the Engine such that a
-/// transaction can generate a subtraction overflow. So we need to populate the Engine state
-/// from a "corrupted" input file.
-///
-/// The test expects the `Engine::read_and_process_transactions_from_csv` function to return an error
-/// indicating a `Subtraction overflow`. If no error occurs or a different error
-/// is returned, the test will fail.
-#[test]
-fn test_subrtaction_overflow() {
-    // Create temporary files for transactions and accounts
-    let mut transactions_file = NamedTempFile::new().expect("Failed to create temporary file");
-    let mut accounts_file = NamedTempFile::new().expect("Failed to create temporary file");
-
-    // Write transaction data
-    transactions_file
-        .write_all(
-            b"type,client,tx,amount\n
-                                        deposit,1,1,10.0000\n
-                                        deposit,2,2,5.0000\n
-                                        deposit,3,3,100.0000\n
-                                        withdrawal,1,4,5.0000",
-        )
-        .unwrap();
-
-    let large_neg_amount = (Decimal::MIN + Decimal::from(1)).to_string();
-    let csv_content = format!(
-        r#"client,available,held,total,locked,\n
-        1,5.0000,0.0000,5.0000,false,\n
-        2,5.0000,0.0000,5.0000,false,\n
-        3,{},{},{},false,\n"#,
-        large_neg_amount, large_neg_amount, large_neg_amount
-    );
-
-    // Write account data
-    write!(accounts_file, "{}", csv_content).unwrap();
-
-    // Create an instance of Engine
-    let engine = Engine::new();
-
-    // Load data from CSV files
-    engine
-        .load_from_previous_session_csvs(
-            transactions_file.path().to_str().unwrap(),
-            accounts_file.path().to_str().unwrap(),
-        )
-        .expect("Failed to load from CSV");
-
-    let mut temp_file = NamedTempFile::new().unwrap();
-    let csv_content = format!(
-        r#"type,client,tx,amount,\n
-           dispute,3,3,,\n"#
-    );
-    write!(temp_file, "{}", csv_content).unwrap();
-    let input_path = temp_file.path().to_str().unwrap();
-
-    match engine.read_and_process_transactions_from_csv(input_path) {
-        Ok(()) => {
-            panic!("Engine::read_and_process_transactions_from_csv should fail due to overflow")
-        }
-        Err(e) => {
-            println!("{}", e.to_string());
-            assert!(
-                e.to_string().contains("Subtraction overflow"),
-                "Expected `Subtraction overflow` error"
-            );
-        }
-    }
-}
-
 /// Tests serialization and deserialization of the `Engine` to and from CSV files.
 ///
 /// This test creates a temporary file for transactions and accounts,
@@ -898,7 +947,7 @@ fn test_subrtaction_overflow() {
 /// asserting the number of entries and checking specific transaction and
 /// account details.
 #[test]
-fn test_serdesr_engine() {
+fn reg_test_serdesr_engine() {
     let engine = Engine::default();
     let input_path = "tests/transactions_mixed.csv";
     match engine.read_and_process_transactions_from_csv(input_path) {
@@ -975,8 +1024,8 @@ fn test_serdesr_engine() {
 use std::sync::Arc;
 use std::thread;
 /// Test that the engine produces consistent results even when processing transactions concurrently.
-/// This test is not exhaustive but provides a reasonable level of confidence that the engine is
-/// thread-safe and can handle concurrent transaction processing.
+/// This test is not exhaustive in terms of transaction type coverage, but provides a reasonable
+/// level of confidence that the engine is thread-safe and can handle concurrent transaction processing.
 ///
 /// The test creates two engines, `engine1` and `engine2`. It processes three files sequentially
 /// with `engine1` and concurrently with `engine2`. It then compares the account snapshots of
@@ -986,7 +1035,7 @@ use std::thread;
 /// so concurrent executions (i.e. with different transaction execution orders) won't cause different
 /// final amounts in the client accounts (if the engine manage the concurrency correctly).
 #[test]
-fn test_engine_consistency_with_concurrent_processing() {
+fn reg_test_engine_consistency_with_concurrent_processing() {
     const BUF_SIZE: usize = 1024;
     // Generate 3 temp files with consistent random transactions
     let temp_file1 = generate_deposit_withdrawal_transactions(10000, 0, 1, 10).unwrap();

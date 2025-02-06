@@ -322,8 +322,9 @@ Transactions Count   Time                 Process Memory (MB)  Engine Memory (MB
 <img src="./img/memory_vs_transactions_ratios.png" width="500">
 
 
-So overall performance of txn_engine, on the aformenthioned assumption, on this machine is ~`1.000.000 transactions/s`  with a avg `~[217.000 (Process Memory) - 230.000 (Engine Memory)] transation/Mb` memory impact on the user account/transaction log storage.
-The plots also show that both time and memory scale as O(n).<br><br>
+So overall performance of txn_engine, on the aforementioned assumption, on this machine is ~`1.000.000 transactions/s` with an average `~[17.000 (Process Memory) - 230.000 (Engine Memory)] transactions/MB` memory impact on the user account/transaction log storage.
+The plots also show that both time and memory scale as O(n).
+
 Comments:
 -  Read the comment of `Engine.size_of` function to see how the Engine Memory is computed. The Engine size does not take into account the data structure overhead.
 -  As the transactions are generated randomly, the error rate can be quite high, which affects the size of the maps. This also may cause lower map sizes for a larger number of input transactions.
@@ -332,7 +333,18 @@ Comments:
 -  The Engine Memory is not only dependent on the number of input transactions but also by the amount of errors (e.g. too big withdrawal or dispute on invalid tx id) that affects the Engine internal maps size.
 -  Errors are **not** returned to stderr in stress-test (`process_stress_test`) mode. However, in a common use case, where transactions are not generated randomly, the error rate is much lower, so this should not affect the reliability of the measurements.
    Additionally, stderr can be redirected to memory (`$()` in a shell script) or to a file in normal (`process_normal`) mode.
--  So it is legitimate to have a big discrepancy for the #transaction/MB estimate Process Memory vs Engine Memory, but the fact that it is ~constant over time respect to the process memory footprint suggests the implementation of txn_engine does not degrade with input size.
+-  So it is legitimate to have a big discrepancy for the #transactions/MB estimate Process Memory vs Engine Memory, but the fact that it is ~constant over time respect to the process memory footprint suggests the implementation of txn_engine does not degrade with input size.
+- Considering ~17.000 transactions/MB : 17.000 x 1024 x 64 Gb  = 1.114.112.000 transactions (i.e. ~1B) can be easily managed on a commodity machine equipped with 64Gb. So sharding the client Ids across multiple nodes and making them sticky to a specific node (e.g. using consistent hashing) with a farm of N commodity nodes we can easily manage N Billion transactions in terms of memory footprint. If every day we restart the engines and load from previous session, if we can discard too old transactions as we won't allow to dispute transaction older than K days, we can keep the growth of the memory footprint slow.
+- The solution scales horizontally, so assuming very restrictive conditions:
+  - we keep all the transactions valid forever, i.e. we always load all the transaction log at each serve restart.
+  - 200 transactions per client per day (which is a very high value)
+  - 200 x 365 days  = 73000 transaction per client per year
+  - 1B / 876.000= ~ 13600 clients per machine per year 
+  we can 
+  - keep 1000 clients per node keeping running for more than ~13 years.
+  - every 1000 clients we can add a node increasing throughput and without sacrificing latency: a farm with 1000 64Gb node can manage 1M clients.
+  - increase the node memory to 256Gb will allow us to use 250 nodes per 1M clients. 
+  - keep the same number of nodes (or lower) and implement logic to periodically store the Engine state on disk or DB and keep in memory only the most active users e.g. by implementing lazy write caching logic. 
 
 ## Regression and Unit Tests
 TODO.
