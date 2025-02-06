@@ -73,7 +73,6 @@ For stress testing suite to measure time and memory conumption (run `cargo build
 ```sh
 ./stress-test.sh
 ```
-<i>NOTE: The execution takes longer than the sum of the reported times because the measured elapsed time does not include the time to output and error dumping. </i>
 
 ## Implementation Description & Assumptions 
 
@@ -324,6 +323,6 @@ Comments:
 -  The Process Memory takes into account the entire process memory footprint, including the Rust runtime and the memory allocation for the I/O and other data structures: this explains the big difference with the Engine memory measures.
 -  The Process Memory is controlled by the runtime and the OS, so it is more volatile.
 -  The Engine Memory is not only dependent on the number of input transactions but also by the amount of errors (e.g. too big withdrawal or dispute on invalid tx id) that affects the Engine internal maps size.
--  Errors are not returned to stderr in `stress-test` mode. However, in a normal use case where transactions are not generated randomly, the error rate is much lower, so this should not affect the reliability of the measurements.
-   Additionally, stderr can be redirected to memory (`$()` in a shell script) or to a file in normal mode.
+-  Errors are **not** returned to stderr in stress-test (`process_stress_test`) mode. However, in a common use case, where transactions are not generated randomly, the error rate is much lower, so this should not affect the reliability of the measurements.
+   Additionally, stderr can be redirected to memory (`$()` in a shell script) or to a file in normal (`process_normal`) mode.
 -  So it is legitimate to have a big discrepancy for the #transaction/MB estimate Process Memory vs Engine Memory, but the fact that it is ~constant over time respect to the process memory footprint suggests the implementation of txn_engine does not degrade with input size.
