@@ -85,57 +85,58 @@ transactions for performance analysis, outputs account statuses to CSV, and leve
 
 ### Project Structure
 
-This project consists of several key components, each responsible for different aspects of transaction processing. Below is a schema of the main structs and functions and their interactions within the project.
+This project consists of a set of key components, each responsible for different aspects of transaction processing. Below is a schema of the main structs and functions and their interactions within the project.
 
-#### Main Structs
+#### Data Structures (`Structs`)
 
 - **`Transaction`**: Represents a financial transaction. Contains fields such as type, client, transaction ID, and amount.
 - **`Account`**: Represents a client's account. Manages balances including available, held, and total funds.
 - **`Engine`**: Core processing unit that handles transactions, manages accounts, and ensures integrity and correctness of operations.
 
-#### Main.rs Functions
+#### `main.rs`
 
 - **`main`**: Parses arguments, distinguishes between `normal processing` and `stress testing`.
 - **`process_normal`**: Processes transactions from a provided CSV file and updates account states accordingly.
 - **`process_stress_test`**: Handles stress testing by processing a large number of generated transactions and measuring performance metrics.
 
-#### utility.rs 
+#### `utility.rs` 
 
 - **`generate_random_transactions`**: Creates a CSV file with randomly generated transactions for stress testing purposes.
 - **`generate_deposit_withdrawal_transactions`**: Generates a specified number of random  deposit/withdrawal transactions and writes them to a temporary CSV file for stress testing purposes.
 - **`get_current_memory`**:Retrieves the memory usage of the current process.
 
-#### Key Methods in Engine and Complexity Analysis
+#### `enige.rs` 
+- Key Methods in `Engine` and Complexity Analysis
 
-- **`new`**: Initializes a new engine instance. 
-- **`check_transaction_semantic`**: Verifies the semantic validity of transactions, ensuring they adhere to business rules. <i>**Complexity: `O(1)`**</i>
-- **`safe_add` / `safe_sub`**: Performs arithmetic operations safely, preventing overflow errors. <i>**Complexity: `O(1)`**</i>
-- **`process_transaction`**: Dispatches a transaction to the appropriate processing function based on its type.<i>**Complexity: `O(1)`**</i>
-- **`size_of`**: Estimates the memory usage of the engine and its data structures.<i>**Complexity: `O(1)`**</i>
-- **`read_and_process_transactions_from_csv`**: Reads transactions from a CSV file and use the Engine instane passed as input parameter to processes them. It calls `read_and_process_transactions`.
-- **`read_and_process_transactions`**: Reads transactions from a input stream and dispatches them for processing by the engine.<i>**Complexity: `O(n)`**</i>
-- **`load_from_previous_session_csvs`**: Loads transactions (cardinality n) and accounts (cardinality m) from CSV files dumped from a previous session to populate the internal maps.<i>**Complexity: `O(n+m)`**</i> 
-- **`dump_transaction_log_to_csvs`**: Dumps the `transaction_log` to a CSV file. <i>**Complexity: `O(n)`**</i>
-- **`dump_account_to_csv`**: Outputs the final state of all accounts to a CSV file after processing is complete.
+  - **`new`**: Initializes a new engine instance. 
+  - **`check_transaction_semantic`**: Verifies the semantic validity of transactions, ensuring they adhere to business rules. <i>**Complexity: `O(1)`**</i>
+  - **`safe_add` / `safe_sub`**: Performs arithmetic operations safely, preventing overflow errors. <i>**Complexity: `O(1)`**</i>
+  - **`process_transaction`**: Dispatches a transaction to the appropriate processing function based on its type.<i>**Complexity: `O(1)`**</i>
+  - **`size_of`**: Estimates the memory usage of the engine and its data structures.<i>**Complexity: `O(1)`**</i>
+  - **`read_and_process_transactions_from_csv`**: Reads transactions from a CSV file and use the Engine instane passed as input parameter to processes them. It calls `read_and_process_transactions`.
+  - **`read_and_process_transactions`**: Reads transactions from a input stream and dispatches them for processing by the engine.<i>**Complexity: `O(n)`**</i>
+  - **`load_from_previous_session_csvs`**: Loads transactions (cardinality n) and accounts (cardinality m) from CSV files dumped from a previous session to populate the internal maps.<i>**Complexity: `O(n+m)`**</i> 
+  - **`dump_transaction_log_to_csvs`**: Dumps the `transaction_log` to a CSV file. <i>**Complexity: `O(n)`**</i>
+  - **`dump_account_to_csv`**: Outputs the final state of all accounts to a CSV file after processing is complete.
 
-General Notes about Complexity Analysis:
-- The complexity analysis on the `Engine` is exhaustive to evaluate the `txn_engine` process as it includes all the core functionalities.
-- The Engine internal state is handled by two DashMaps `accounts` and `transaction_log`. When considering DashMap, operations like insertion, lookup, and removal are generally O(1) in terms of time complexity, thanks to its concurrent hash map implementation. However, under heavy contention or in worst-case scenarios, performance can degrade due to the lock mechanism. See <i>Concurrency Management</i> section.
-- CSV Operations: File I/O operations can introduce variability due to disk I/O, but from an algorithmic standpoint, reading or writing each record is considered O(1) per operation.
+- General Notes about Complexity Analysis:
+  - The complexity analysis on the `Engine` is exhaustive to evaluate the `txn_engine` process as it includes all the core functionalities.
+  - The Engine internal state is handled by two DashMaps `accounts` and `transaction_log`. When considering DashMap, operations like insertion, lookup, and removal are generally O(1) in terms of time complexity, thanks to its concurrent hash map implementation. However, under heavy contention or in worst-case scenarios, performance can degrade due to the lock mechanism. See <i>Concurrency Management</i> section.
+  - CSV Operations: File I/O operations can introduce variability due to disk I/O, but from an algorithmic standpoint, reading or writing each record is considered O(1) per operation.
+
+- `EngineFunctions` trait
+
+  - The EngineFunctions trait provides a set of functions that can be called on the Engine struct. These functions allow clients to interact with the Engine and perform operations such as:
+
+    - **deposit**: Deposits a certain amount of funds into a client's account. Implemented by Engine as a call to `process_transaction` with the `Deposit` transaction type.
+    - **withdraw**: Withdraws a certain amount of funds from a client's account. Implemented by Engine as a call to `process_transaction` with the `Withdrawal` transaction type.
+    - **dispute**: Disputes a transaction marking it as `disputed`. Implemented by Engine as a call to `process_transaction` with the `Dispute` transaction type.
+    - **resolve**: Resolves a dispute, releasing the `disputed` transaction. Implemented by Engine as a call to `process_transaction` with the `Resolve` transaction type.
+    - **chargeback**: Reverses a disputed transaction, effectively removing the associated funds from the client's account and locking the account. Implemented by Engine as a call to `process_transaction` with the `Chargeback` transaction type.
 
 Here below a simplified diagram of the main structs and relationships:<br>
 <img src="./img/scheme.jpg" width="500">
 
-
-#### EngineFunctions trait
-
-The EngineFunctions trait provides a set of functions that can be called on the Engine struct. These functions allow clients to interact with the Engine and perform operations such as:
-
-- **deposit**: Deposits a certain amount of funds into a client's account. Implemented by Engine as a call to `process_transaction` with the `Deposit` transaction type.
-- **withdraw**: Withdraws a certain amount of funds from a client's account. Implemented by Engine as a call to `process_transaction` with the `Withdrawal` transaction type.
-- **dispute**: Disputes a transaction marking it as `disputed`. Implemented by Engine as a call to `process_transaction` with the `Dispute` transaction type.
-- **resolve**: Resolves a dispute, releasing the `disputed` transaction. Implemented by Engine as a call to `process_transaction` with the `Resolve` transaction type.
-- **chargeback**: Reverses a disputed transaction, effectively removing the associated funds from the client's account and locking the account. Implemented by Engine as a call to `process_transaction` with the `Chargeback` transaction type.
 
 #### Error Handling
 
