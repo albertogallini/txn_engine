@@ -137,7 +137,7 @@ Here below a simplified diagram of the main structs and relationships:<br>
 <img src="./img/scheme.jpg" width="500">
 
 
-#### Error Handling
+### Error Handling
 
 The system includes comprehensive error handling with specific error messages for various conditions like insufficient funds, account not found, and transaction disputes.
 The system handles the following error conditions:
@@ -188,11 +188,10 @@ Error: Some errors occurred while processing transactions:
 
 ```
 
-
-#### Memory Efficiency
+### Memory Efficiency
 The engine is designed to be memory efficient, processing transactions through buffering the input csv stream to ensure scalability even with large datasets. See `read_and_process_transactions` in `./src/utility.rs`
 
-#### Concurrency Management
+### Concurrency Management
 In spite of `./src/main.rs` implementing a single process that reads sequentially from an input CSV stream, the internal `Engine` is designed to support concurrent input transaction streams. Incorporating `DashMap` into the `Engine` struct for managing `accounts` and `transaction_log` provides a concurrent, thread-safe hash map implementation that significantly enhances our system's performance and scalability. <u>By allowing multiple threads to read or write to different entries simultaneously without explicit locking, `DashMap` reduces lock contention: Instead of locking the entire map or individual entries, `DashMap` uses fine-grained locking internally (i.e sharded locking'), reducing contention when many threads are accessing different parts of the data map. It improves memory efficiency, and simplifies the codebase, making it easier to manage concurrent operations across potentially thousands of client transactions</u>. This choice supports the goal of creating a high-throughput, low-latency transaction processing system that can scale with demand, all while maintaining code maintainability.<br>
 
 - Benefits of [`DashMap`](https://docs.rs/dashmap/latest/dashmap/struct.DashMap.html):
@@ -208,7 +207,7 @@ In spite of `./src/main.rs` implementing a single process that reads sequentiall
 
 See also `test_engine_consistency_with_concurrent_processing` test case in `/tests/test.rs`
 
-#### Generalization of Disputes:
+### Generalization of Disputes:
 - Deposits: When disputing a deposit, you would move the disputed amount from available to held. This keeps the total the same since you're just reallocating the funds.
 - Withdrawals: When disputing a withdrawal, the process is similar but with a twist: the amount held would indeed be <i>negative</i> because it represents money that was taken out (withdrawn) from the account but is now under dispute. Holding a negative amount means you're reserving the possibility that this withdrawal could be reversed, effectively increasing the account's available balance by this negative (or positive in terms of adding back) amount while the dispute is unresolved. Details:
 
@@ -233,7 +232,7 @@ NOTE on **locked** account: Once an account is locked, no further actions are po
 
 Implementation: see `fn check_transaction_semantic` and `impl EngineFunctions for Engine` in `./src/engine.rs`
 
-## Engine state encoding/decoding:
+### Engine state encoding/decoding:
 The `-dump` command line parameter will cause the `Engine` to dump the entire content of the internal `transaction log` to CSV file (in addition to the accounts on the standard output). The file will be written in the current working directory.
 
 This is useful for debugging and testing since it allows you to save the state of the engine after running a set of transactions and then load it back up for further testing or verification.
