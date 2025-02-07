@@ -7,9 +7,9 @@ use dashmap::DashMap;
 use std::fs::File;
 use thiserror::Error;
 
-use csv::{ReaderBuilder, Trim, Writer};
+use csv::{ReaderBuilder, Trim};
 use rust_decimal::Decimal;
-use std::io::{BufReader, Read, Write};
+use std::io::{BufReader, BufWriter, Read, Write};
 
 #[derive(Debug, Error)]
 pub enum EngineError {
@@ -78,17 +78,23 @@ pub trait EngineFunctions {
     fn read_and_process_transactions_from_csv(
         &self,
         input_path: &str,
+        buffer_size: usize,
     ) -> Result<(), TransactionProcessingError>;
     fn load_from_previous_session_csvs(
         &self,
         transactions_file: &str,
         accounts_file: &str,
     ) -> Result<(), EngineSerDeserError>;
-    fn dump_account_to_csv<W: Write>(&self, writer: W) -> Result<(), Box<dyn std::error::Error>>;
+    fn dump_account_to_csv<W: Write>(
+        &self,
+        writer: W,
+        buffer_size: usize,
+    ) -> Result<(), Box<dyn std::error::Error>>;
     fn dump_transaction_log_to_csvs(
         &self,
         transactions_path: &str,
-    ) -> Result<(), EngineSerDeserError>;
+        buffer_size: usize,
+    ) -> Result<(), Box<dyn std::error::Error>>;
     fn size_of(&self) -> usize;
 }
 
@@ -240,16 +246,15 @@ impl EngineFunctions for Engine {
     fn read_and_process_transactions_from_csv(
         &self,
         input_path: &str,
+        buffer_size: usize,
     ) -> Result<(), TransactionProcessingError> {
-        const BUFFER_SIZE: usize = 16_384;
-
         let file = File::open(input_path).map_err(|e| {
             TransactionProcessingError::MultipleErrors(vec![format!("Error opening file: {}", e)])
         })?;
         let reader = BufReader::new(file);
 
         // Call the method from the Engine struct
-        self.read_and_process_transactions(reader, BUFFER_SIZE)
+        self.read_and_process_transactions(reader, buffer_size)
     }
 
     /// Reads transactions from a stream in chunk and processes them.
@@ -401,7 +406,7 @@ impl EngineFunctions for Engine {
         Ok(())
     }
 
-    /// Outputs the final state of all accounts to stdout as a CSV file.
+    /// Outputs the final state of all accounts to a CSV file after processing is complete.
     ///
     /// The order of the columns is:
     /// - client: The client ID.
@@ -411,12 +416,23 @@ impl EngineFunctions for Engine {
     /// - locked: Whether the account is locked.
     ///
     /// # Errors
-    /// - `Box<dyn std::error::Error>` if any errors occur while writing to stdout.
-    fn dump_account_to_csv<W: Write>(&self, writer: W) -> Result<(), Box<dyn std::error::Error>> {
-        let mut csv_writer = Writer::from_writer(writer);
-        csv_writer.write_record(["client", "available", "held", "total", "locked"])?;
-        csv_writer.flush()?; // Ensure the header is written before calling write_account_balances
-        serialize_account_balances_csv(&self.accounts, std::io::stdout())
+    /// - `Box<dyn std::error::Error>` if any errors occur while writing to the CSV file.
+    fn dump_account_to_csv<W: Write>(
+        &self,
+        writer: W,
+        buffer_size: usize,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        // Wrap the writer with a buffered writer
+
+        let mut buf_writer = BufWriter::with_capacity(buffer_size, writer);
+        writeln!(buf_writer, "client,available,held,total,locked")?;
+        buf_writer.flush()?; // Ensure the header is written
+
+        serialize_account_balances_csv(&self.accounts, &mut buf_writer)?;
+
+        buf_writer.flush()?;
+
+        Ok(())
     }
 
     /// Dumps the transaction log to a CSV file.
@@ -434,16 +450,19 @@ impl EngineFunctions for Engine {
     fn dump_transaction_log_to_csvs(
         &self,
         transactions_path: &str,
-    ) -> Result<(), EngineSerDeserError> {
+        buffer_size: usize,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         // Dump transactions
-        {
-            let file = File::create(transactions_path).map_err(EngineSerDeserError::Io)?;
-            let mut writer = Writer::from_writer(&file);
-            // Write header for transactions
-            writer.write_record(["type", "client", "tx", "amount", "disputed"])?;
-            writer.flush()?; // Ensure the header is written before calling write_account_balances
-            let _ = serialize_transcation_log_csv(&self.transaction_log, &file);
-        }
+
+        let file = File::create(transactions_path)?;
+        let mut buf_writer = BufWriter::with_capacity(buffer_size, file);
+
+        writeln!(buf_writer, "type,client,tx,amount,disputed")?;
+        buf_writer.flush()?; // Ensure the header is written
+
+        serialize_transcation_log_csv(&self.transaction_log, &mut buf_writer)?;
+
+        buf_writer.flush()?;
 
         Ok(())
     }

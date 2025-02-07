@@ -26,7 +26,7 @@ This project implements a transaction processing system with the following capab
 - **Memory Efficiency**: Processes transactions using stream buffering to manage memory usage even with large datasets.
 - **Concurrency Management**: Internal transaction engine state (`accouts` and `transactions_log`) are implemented using [`DashMap`](https://docs.rs/dashmap/latest/dashmap/struct.DashMap.html) to handle (potential) concurrent access efficiently
 - **Generalization of Disputes**: Disputes are managed on both `Deposit` and `Withdrawal`.
-- **Engine state encoding/decoding**: The `Engine` struct implementing the transaction engine logic is equipped with `load_from_previous_session_csvs` and `dump_transaction_log_to_csvs` functions encode/decode to/from CSV files the internal state (`account` and `transactions_log`).
+- **Engine state encoding/decoding**: The `Engine` struct implementing the transaction engine logic is equipped with `load_from_previous_session_csvs`,`dump_account_to_csv` and `dump_transaction_log_to_csvs` functions encode/decode to/from CSV files the internal state (`account` and `transactions_log`).
 
 ## Getting Started
 
@@ -108,15 +108,15 @@ This project consists of a set of key components, each responsible for different
 - Key Methods in `Engine` and Complexity Analysis
 
   - **`new`**: Initializes a new engine instance. 
-  - **`check_transaction_semantic`**: Verifies the semantic validity of transactions, ensuring they adhere to business rules. <i>**Complexity: `O(1)`**</i>
-  - **`safe_add` / `safe_sub`**: Performs arithmetic operations safely, preventing overflow errors. <i>**Complexity: `O(1)`**</i>
-  - **`process_transaction`**: Dispatches a transaction to the appropriate processing function based on its type.<i>**Complexity: `O(1)`**</i>
-  - **`size_of`**: Estimates the memory usage of the engine and its data structures.<i>**Complexity: `O(1)`**</i>
-  - **`read_and_process_transactions_from_csv`**: Reads transactions from a CSV file and use the Engine instane passed as input parameter to processes them. It calls `read_and_process_transactions`.
-  - **`read_and_process_transactions`**: Reads transactions from a input stream and dispatches them for processing by the engine.<i>**Complexity: `O(n)`**</i>
-  - **`load_from_previous_session_csvs`**: Loads transactions (cardinality n) and accounts (cardinality m) from CSV files dumped from a previous session to populate the internal maps.<i>**Complexity: `O(n+m)`**</i> 
-  - **`dump_transaction_log_to_csvs`**: Dumps the `transaction_log` to a CSV file. <i>**Complexity: `O(n)`**</i>
-  - **`dump_account_to_csv`**: Outputs the final state of all accounts to a CSV file after processing is complete.
+  - **`check_transaction_semantic`**: Verifies the semantic validity of transactions, ensuring they adhere to business rules. <i>**Complexity: `O(1)`, memory space`n/a`**</i>
+  - **`safe_add` / `safe_sub`**: Performs arithmetic operations safely, preventing overflow errors. <i>**Complexity: `O(1)`, memory space`n/a`**</i>
+  - **`process_transaction`**: Dispatches a transaction to the appropriate processing function based on its type.<i>**Complexity: `O(1)`, memory space`n/a`**</i>
+  - **`size_of`**: Estimates the memory usage of the engine and its data structures.<i>**Complexity: `O(1)`, memory space`n/a`**</i>
+  - **`read_and_process_transactions_from_csv`**: Reads transactions from a CSV file and use the Engine instance passed as input parameter to processes them. It calls `read_and_process_transactions`.
+  - **`read_and_process_transactions`**: Reads transactions from a input stream and dispatches them for processing by the engine.<i>**Complexity: time `O(n)`, memory space`O(n)`**</i>
+  - **`load_from_previous_session_csvs`**: Loads transactions (cardinality n) and accounts (cardinality m) from CSV files dumped from a previous session to populate the internal maps.<i>**Complexity: `O(n+m)`, memory space`O(n+m)`**</i> 
+  - **`dump_transaction_log_to_csvs`**: Dumps the `transaction_log` to a CSV file. <i>**Complexity: `O(n)`, memory space`O(1)` as uses buffering**</i>
+  - **`dump_account_to_csv`**: Outputs the final state of all accounts to a CSV file after processing is complete..<i>**Complexity: time `O(m)`, memory space`O(1)` as uses buffering**</i>
 
 - General Notes about Complexity Analysis:
   - The complexity analysis on the `Engine` is exhaustive to evaluate the `txn_engine` process as it includes all the core functionalities.
@@ -135,14 +135,14 @@ This project consists of a set of key components, each responsible for different
 
   - The `EngineFunctions` trait provides the following public methods to interact with the Engine and operate on the internal state:
     - **`read_and_process_transactions_from_csv`**: Reads transactions from a CSV file and processes them using the Engine.
-    - **`load_from_previous_session_csvs`**: Loads transactions and accounts from CSV files dumped from a previous session to populate the internal maps.
+    - **`load_from_previous_session_csvs`**: Loads transactions and accounts from CSV files dumped from a previous session to populate the internal maps. (This functionality is public but not exposed)
     - **`dump_transaction_log_to_csvs`**: Dumps the `transaction_log` to a CSV file.
     - **`dump_account_to_csv`**: Outputs the final state of all accounts to a CSV file after processing is complete.
 
 The separation of public and private functions in the `Engine` struct is achieved using two distinct traits: `EngineFunctions` for public APIs and `EngineStateTransitionFunctions` for internal state management, which enhances clarity, reduces complexity, and improves security by preventing unintended modifications.
 
 Here below a simplified diagram of the main structs and relationships:<br>
-<img src="./img/scheme.png" width="500">
+<img src="./img/scheme.png" width="600">
 
 
 ### Error Handling
@@ -250,7 +250,7 @@ The `transactions_log` field is a `dashmap::DashMap<TransactionId, Transaction>`
 The `serde` module is used to serialize/deserialize the `dashmap`s.
 
 Once you have obtained the account dump (returned on the standard output) and the transaction log dump by using the `-dump` cli parameter, it is possible to use those files to decode the Engine internal status.
-This is possible only through internal APIs (see `load_from_previous_session_csvs` Engine function and `test_serdesr_engine` ) and not exposed as a cli parameter. 
+This is possible only through internal APIs (see `load_from_previous_session_csvs` Engine function and `test_serdesr_engine` ) and not exposed as a command line parameter. 
 This function is useful to easily test some edge cases that are not possible if the internal state of an `Engine` is built by the `read_and_process_transactions` Engine function that executes all the semantic checks on the 
 transactions. 
 `load_from_previous_session_csvs` is much faster than `read_and_process_transactions` as there is no semantic check. It is a blind decoding of the internal Engine maps dump. For this reason, it 
@@ -289,7 +289,7 @@ The function works as follows:
 - It writes each transaction line to the file.
 - Then it loops from 100 to 1000100 transactions in steps of 100 and measures the time and memory consumption of the program. The output is written to stress_test_results.txt in the format `Transactions Count, Time, Process Memory (MB), Engine Memory (MB)`.
 
-Note: The `generate_random_transactions` function is not meant to mimic real-world transactions since it generates random transactions without any ordering or dependencies. This results in a <b>higher number of error conditions</b> compared to real-world use cases and as a consequence the number of entry in both the `transaction_log` and `account` maps will be lower than real-world use case. But it is good enough to see how the system resources are used increasing the size of the input.
+Note: The `generate_random_transactions` function is not meant to mimic real-world transactions since it generates random transactions without any ordering or dependencies. This results in a <b>higher number of error conditions</b> compared to real-world use cases and as a consequence the number of entry in both the `transaction_log` and `account` maps will be lower than real-world use case. But it is good enough to see how the system resources are used increasing the size of the input, especially to check if there is a trend that is not coeherent with the complexity analysis.
 
 Example of output on Mac-Book M3 24 Gb :
 ```
@@ -325,9 +325,9 @@ Transactions Count   Time                 Process Memory (MB)  Engine Memory (MB
 So overall performance of txn_engine, on the aforementioned assumption, on this machine is ~`1.000.000 transactions/s` with an average `~[17.000 (Process Memory) - 230.000 (Engine Memory)] transactions/MB` memory impact on the user account/transaction log storage.
 The plots also show that both time and memory scale as O(n).
 
-Comments:
+### Notes & Comments
 -  Read the comment of `Engine.size_of` function to see how the Engine Memory is computed. The Engine size does not take into account the data structure overhead.
--  As the transactions are generated randomly, the error rate can be quite high, which affects the size of the maps. This also may cause lower map sizes for a larger number of input transactions.
+-  As the transactions are generated randomly, the error rate can be quite high, which affects the size of the maps. As the error rate is high the  maps grow slower than a real use case.
 -  The Process Memory takes into account the entire process memory footprint, including the Rust runtime and the memory allocation for the I/O and other data structures: this explains the big difference with the Engine memory measures.
 -  The Process Memory is controlled by the runtime and the OS, so it is more volatile.
 -  The Engine Memory is not only dependent on the number of input transactions but also by the amount of errors (e.g. too big withdrawal or dispute on invalid tx id) that affects the Engine internal maps size.

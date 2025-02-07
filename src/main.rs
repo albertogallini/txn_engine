@@ -8,6 +8,8 @@ use tempfile::NamedTempFile;
 use txn_engine::engine::{Engine, EngineFunctions};
 use txn_engine::utility::{generate_random_transactions, get_current_memory};
 
+const BUFFER_SIZE: usize = 16_384;
+
 /// Entry point of the application. Parses command-line arguments to determine the mode of operation
 /// (normal processing or stress testing) and handles transaction processing accordingly.
 ///
@@ -64,12 +66,12 @@ fn process_normal(
     input_path: &str,
     should_dump: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    match engine.read_and_process_transactions_from_csv(input_path) {
+    match engine.read_and_process_transactions_from_csv(input_path, BUFFER_SIZE) {
         Ok(()) => {}
         Err(e) => eprintln!("Error: {}", e),
     }
 
-    engine.dump_account_to_csv(std::io::stdout())?;
+    engine.dump_account_to_csv(std::io::stdout(), BUFFER_SIZE)?;
 
     if should_dump {
         let now: DateTime<Utc> = Utc::now();
@@ -77,7 +79,7 @@ fn process_normal(
 
         let transactions_file = format!("{}_transaction_log.csv", timestamp);
 
-        engine.dump_transaction_log_to_csvs(&transactions_file)?;
+        engine.dump_transaction_log_to_csvs(&transactions_file, BUFFER_SIZE)?;
     }
 
     Ok(())
@@ -109,9 +111,10 @@ fn process_stress_test(num_transactions: usize) -> Result<(), Box<dyn std::error
     // Process transactions directly from the temporary file
     // Error are not printed on the stderr during the stress test as it may affect the performance of the engine
     // especially when the transactions are generated randomly and the error rate is is very high
-    if let Ok(()) =
-        engine.read_and_process_transactions_from_csv(temp_file.path().to_str().unwrap())
-    {}
+    if let Ok(()) = engine
+        .read_and_process_transactions_from_csv(temp_file.path().to_str().unwrap(), BUFFER_SIZE)
+    {
+    }
 
     {
         // let's measure the resoruces before creating the dump to properly measure the engine performance:
@@ -125,7 +128,7 @@ fn process_stress_test(num_transactions: usize) -> Result<(), Box<dyn std::error
         eprintln!("Memory consumption delta: {:.3} MB", memory_delta_mb);
     }
 
-    engine.dump_account_to_csv(std::io::stdout())?;
+    engine.dump_account_to_csv(std::io::stdout(), BUFFER_SIZE)?;
 
     Ok(())
 }
