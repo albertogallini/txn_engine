@@ -85,7 +85,7 @@ pub trait EngineFunctions {
         writer: W,
         buffer_size: usize,
     ) -> Result<(), Box<dyn std::error::Error>>;
-    fn dump_transaction_log_to_csvs(
+    fn dump_transaction_log_to_csv(
         &self,
         transactions_path: &str,
         buffer_size: usize,
@@ -438,7 +438,7 @@ impl EngineFunctions for Engine {
     ///
     /// # Errors
     /// - `Box<dyn std::error::Error>` if any errors occur while writing to the file.
-    fn dump_transaction_log_to_csvs(
+    fn dump_transaction_log_to_csv(
         &self,
         transactions_path: &str,
         buffer_size: usize,

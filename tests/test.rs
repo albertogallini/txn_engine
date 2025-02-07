@@ -964,7 +964,7 @@ fn reg_test_serdesr_engine() {
         let transactions_file = NamedTempFile::new().expect("Failed to create temporary file");
         // Use the temporary files for dumping session data
         match engine
-            .dump_transaction_log_to_csvs(transactions_file.path().to_str().unwrap(), BUFFER_SIZE)
+            .dump_transaction_log_to_csv(transactions_file.path().to_str().unwrap(), BUFFER_SIZE)
         {
             Ok(()) => {}
             Err(e) => println!("Some error occurred dumping the engine: {}", e),

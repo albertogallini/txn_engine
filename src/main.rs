@@ -79,7 +79,7 @@ fn process_normal(
 
         let transactions_file = format!("{}_transaction_log.csv", timestamp);
 
-        engine.dump_transaction_log_to_csvs(&transactions_file, BUFFER_SIZE)?;
+        engine.dump_transaction_log_to_csv(&transactions_file, BUFFER_SIZE)?;
     }
 
     Ok(())

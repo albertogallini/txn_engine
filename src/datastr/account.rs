@@ -4,7 +4,7 @@ use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use std::io::Write;
 
-use super::deser::{deserialize_account_amount, deserialize_trimmed_string};
+use super::{deser::{deserialize_account_amount, deserialize_trimmed_string}, transaction::ClientId};
 
 // Represents an account
 #[derive(Debug, Default, Clone, Deserialize, Serialize, PartialEq)]
@@ -19,6 +19,7 @@ pub struct Account {
     pub locked: bool,
 }
 
+
 /// Writes the final state of all accounts to stdout as a CSV file.
 ///
 /// This function is used at the end of the `txn_engine` to output the final state of all accounts to stdout.
@@ -32,7 +33,7 @@ pub struct Account {
 /// # Errors
 /// - `Box<dyn std::error::Error>` if any errors occur while writing to stdout.
 pub fn serialize_account_balances_csv<W: Write>(
-    accounts: &DashMap<u16, Account>,
+    accounts: &DashMap<ClientId, Account>,
     writer: W,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut csv_writer = Writer::from_writer(writer);

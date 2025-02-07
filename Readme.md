@@ -101,31 +101,35 @@ This project consists of a set of key components, each responsible for different
 #### `utility.rs` 
 
 - **`generate_random_transactions`**: Creates a CSV file with randomly generated transactions for stress testing purposes.
-- **`generate_deposit_withdrawal_transactions`**: Generates a specified number of random  deposit/withdrawal transactions and writes them to a temporary CSV file for stress testing purposes.
+- **`generate_deposit_withdrawal_transactions`**: Generates a specified number of random  deposit/withdrawal transactions and writes them to a temporary CSV file for testing concurrency on `Engine` insances.
 - **`get_current_memory`**:Retrieves the memory usage of the current process.
 
 #### `enige.rs` 
-- Main Methods in `Engine` and implementation of `EngineFunctions` and `EngineStateTransitionFunctions` for `Engine and Complexity Analysis:
+- Main Methods in `Engine` and its implementation of `EngineFunctions` and `EngineStateTransitionFunctions` traits:
+  - **`read_and_process_transactions_from_csv`**: Reads transactions from a CSV file and processes them. It calls `read_and_process_transactions`.
+  - **`read_and_process_transactions`**: Reads transactions from a input stream and dispatches them for processing by the engine.***Complexity: time `O(n)`, memory space`O(n)`***
+  - **`load_from_previous_session_csvs`**: Loads **n** transactions and **m** accounts  from CSV files dumped from a previous session to populate the internal maps.***Complexity: `O(n+m)`, memory space`O(n+m)`*** 
+  - **`process_transaction`**: Dispatches a transaction to the appropriate processing function based on its type.***Complexity: `O(1)`, memory space`n/a`*** 
+  - **`check_transaction_semantic`**: Verifies the semantic validity of transactions, ensuring they adhere to business rules. ***Complexity: `O(1)`, memory space`n/a`***
+  - **`dump_transaction_log_to_csv`**: Dumps the `transaction_log` to a CSV file. ***Complexity: `O(n)`, memory space`O(1)` as uses buffering***
+  - **`dump_account_to_csv`**: Outputs the final state of all accounts to a CSV file after processing is complete..***Complexity: time `O(m)`, memory space`O(1)` as uses buffering***
+  - **`safe_add` / `safe_sub`**: Performs arithmetic operations safely, preventing overflow errors. ***Complexity: `O(1)`, memory space`n/a`***
+  - **`size_of`**: Estimates the memory usage of the engine and its data structures.***Complexity: `O(1)`, memory space`n/a`***
 
-  - **`new`**: Initializes a new engine instance. 
-  - **`check_transaction_semantic`**: Verifies the semantic validity of transactions, ensuring they adhere to business rules. <i>**Complexity: `O(1)`, memory space`n/a`**</i>
-  - **`safe_add` / `safe_sub`**: Performs arithmetic operations safely, preventing overflow errors. <i>**Complexity: `O(1)`, memory space`n/a`**</i>
-  - **`process_transaction`**: Dispatches a transaction to the appropriate processing function based on its type.<i>**Complexity: `O(1)`, memory space`n/a`**</i> 
-  - **`size_of`**: Estimates the memory usage of the engine and its data structures.<i>**Complexity: `O(1)`, memory space`n/a`**</i>
-  - **`read_and_process_transactions_from_csv`**: Reads transactions from a CSV file and use the Engine instance passed as input parameter to processes them. It calls `read_and_process_transactions`.
-  - **`read_and_process_transactions`**: Reads transactions from a input stream and dispatches them for processing by the engine.<i>**Complexity: time `O(n)`, memory space`O(n)`**</i>
-  - **`load_from_previous_session_csvs`**: Loads transactions (cardinality n) and accounts (cardinality m) from CSV files dumped from a previous session to populate the internal maps.<i>**Complexity: `O(n+m)`, memory space`O(n+m)`**</i> 
-  - **`dump_transaction_log_to_csvs`**: Dumps the `transaction_log` to a CSV file. <i>**Complexity: `O(n)`, memory space`O(1)` as uses buffering**</i>
-  - **`dump_account_to_csv`**: Outputs the final state of all accounts to a CSV file after processing is complete..<i>**Complexity: time `O(m)`, memory space`O(1)` as uses buffering**</i>
-
-- General Notes about Complexity Analysis:
+- General Notes about ***Complexity Analysis***:
   - The complexity analysis on the `Engine` is exhaustive to evaluate the `txn_engine` process as it includes all the core functionalities.
-  - The Engine internal state is handled by two DashMaps `accounts` and `transaction_log`. When considering DashMap, operations like insertion, lookup, and removal are generally O(1) in terms of time complexity, thanks to its concurrent hash map implementation. However, under heavy contention or in worst-case scenarios, performance can degrade due to the lock mechanism. See <i>Concurrency Management</i> section.
+  - The Engine internal state is handled by two DashMaps `accounts` and `transaction_log`. When considering DashMap, operations like insertion, lookup, and removal are generally O(1) in terms of time complexity, thanks to its concurrent hash map implementation. However, under heavy contention or in worst-case scenarios, performance can degrade due to the lock mechanism. See *Concurrency Management* section.
   - CSV Operations: File I/O operations can introduce variability due to disk I/O, but from an algorithmic standpoint, reading or writing each record is considered O(1) per operation.
 
 - `EngineFunctions` and `EngineStateTransitionFunctions` traits:
 
-  - The `EngineStateTransitionFunctions` trait provides a set of functions that can be called on the `Engine` struct internally. These functions are not public and  allow clients to interact with the Engine and perform operations such as:
+  - The `EngineFunctions` trait provides the following **public** methods to interact with the Engine and operate on the internal state:
+    - **`read_and_process_transactions_from_csv`**: Reads transactions from a CSV file and processes them using the Engine.
+    - **`load_from_previous_session_csvs`**: Loads transactions and accounts from CSV files dumped from a previous session to populate the internal maps. (This functionality is public but not exposed)
+    - **`dump_transaction_log_to_csv`**: Dumps the `transaction_log` to a CSV file.
+    - **`dump_account_to_csv`**: Outputs the final state of all accounts to a CSV file after processing is complete.
+
+  - The `EngineStateTransitionFunctions` trait provides a set of functions that can be called on the `Engine` struct **internally**. These functions are not public and  allow clients to interact with the Engine and perform operations such as:
     - **`process_transaction`**: To handle common actions across all the transactions type and dispach to specifc methods.
     - **`process_deposit`**: Deposits a certain amount of funds into a client's account.
     - **`process_withdraw`**: Withdraws a certain amount of funds from a client's account. 
@@ -133,11 +137,7 @@ This project consists of a set of key components, each responsible for different
     - **`process_resolve`**: Resolves a dispute, releasing the `disputed` transaction. 
     - **`process_chargeback`**: Reverses a disputed transaction, effectively removing the associated funds from the client's account and locking the account.
 
-  - The `EngineFunctions` trait provides the following public methods to interact with the Engine and operate on the internal state:
-    - **`read_and_process_transactions_from_csv`**: Reads transactions from a CSV file and processes them using the Engine.
-    - **`load_from_previous_session_csvs`**: Loads transactions and accounts from CSV files dumped from a previous session to populate the internal maps. (This functionality is public but not exposed)
-    - **`dump_transaction_log_to_csvs`**: Dumps the `transaction_log` to a CSV file.
-    - **`dump_account_to_csv`**: Outputs the final state of all accounts to a CSV file after processing is complete.
+
 
 The separation of public and private functions in the `Engine` struct is achieved using two distinct traits: `EngineFunctions` for public APIs and `EngineStateTransitionFunctions` for internal state management, which enhances clarity, reduces complexity, and improves security by preventing unintended modifications.
 
@@ -217,7 +217,7 @@ See also `test_engine_consistency_with_concurrent_processing` test case in `/tes
 
 ### Generalization of Disputes:
 - Deposits: When disputing a deposit, you would move the disputed amount from available to held. This keeps the total the same since you're just reallocating the funds.
-- Withdrawals: When disputing a withdrawal, the process is similar but with a twist: the amount held would indeed be <i>negative</i> because it represents money that was taken out (withdrawn) from the account but is now under dispute. Holding a negative amount means you're reserving the possibility that this withdrawal could be reversed, effectively increasing the account's available balance by this negative (or positive in terms of adding back) amount while the dispute is unresolved. Details:
+- Withdrawals: When disputing a withdrawal, the process is similar but with a twist: the amount held would indeed be *negative* because it represents money that was taken out (withdrawn) from the account but is now under dispute. Holding a negative amount means you're reserving the possibility that this withdrawal could be reversed, effectively increasing the account's available balance by this negative (or positive in terms of adding back) amount while the dispute is unresolved. Details:
 
   - For a Disputed Deposit:
     - Available: Decreases by the disputed amount.
@@ -338,7 +338,7 @@ The plots also show that both time and memory scale as O(n).
 
 - Assumptions
   - Considering ~17.000 transactions/MB  (`Process Memory (MB)`/`#Transactions`): <br>
-    <i>17.000 x 1024 x 64 Gb  = 1.114.112.000 transactions (i.e. ~**1B**)</i><br>
+    *17.000 x 1024 x 64 Gb  = 1.114.112.000 transactions (i.e. ~**1B**)*<br>
     can be managed on a commodity machine equipped with 64Gb. So **sharding the client Ids across multiple nodes** and making them sticky to a specific node (e.g. using consistent hashing) with a farm of N commodity nodes we can  manage N Billions transactions in terms of memory footprint. 
   - In a production enviroment the engine processes should be restarted regularly (e.g.: every day): at each restart the process should load from previous session.
   - In a production enviroment the engine processes should regularly store the maps content on disk or DB to recover from crashes. (See also further enhancements).
