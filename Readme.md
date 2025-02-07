@@ -274,7 +274,6 @@ correct current status loading just the transactions of the current day. Which i
   (like JSON for API responses, or binary formats for efficiency), Serde can handle these conversions
   without changing your core data structures. This makes your code more adaptable to changes in data storage or transmission methods
 
-  On a separate note: loading the previous session state is important to prevent duplicate transactions across sessions.
 
 ## Stress Test script & performance measure:
 
@@ -360,4 +359,35 @@ The plots also show that both time and memory scale as O(n).
     process memory footprint allowing more client per node.  
 
 ## Regression and Unit Tests
-TODO.
+
+All the tests are contained in `./test/test.rs` and are divided into unit test (focus on specific functions and cases) and regressions tests (coverig the broad functionalities to ensure some changes does not brek the logic). 
+Here's a bullet-point list of the functions the test suite with brief descriptions.
+
+### Unit tests: 
+1. **`unit_test_deposit_and_withdrawal`**: Tests basic deposit and withdrawal functionalities, ensuring correct balance updates.
+2. **`unit_test_deposit_and_dispute`**: Verifies that disputes correctly move funds from available to held balances.
+3. **`unit_test_dispute_deposit_after_withdrawal`**: Checks the behavior when disputing a deposit after a withdrawal, ensuring held funds are calculated correctly.
+4. **`unit_test_double_dispute`**: Tests the engine's handling of multiple disputes on the same transaction, ensuring only one dispute affects the account.
+5. **`unit_test_txid_reused_after_dispute_and_resolve`**: Ensures that a transaction ID cannot be reused after it has been disputed and then resolved, expecting an error for repeated transaction IDs.
+6. **`unit_test_deposit_and_dispute_resolve`**: Tests the sequence of deposit, dispute, and resolve to ensure funds revert back to available after resolution.
+7. **`unit_test_deposit_and_dispute_chargeback`**: Verifies that a chargeback locks an account and removes the disputed amount from both held and total balances.
+8. **`unit_test_deposit_withdrawal_dispute_withdrawal`**: Checks if disputing a withdrawal correctly adjusts the account balance.
+9. **`unit_test_deposit_withdrawal_too_much`**: Ensures that a withdrawal exceeding available funds fails and no change occurs to the account balance.
+10. **`unit_test_deposit_negative`**: Tests the engine's response to a negative deposit amount, expecting an error.
+11. **`unit_test_withdrawal_negative`**: Checks that a negative withdrawal amount is rejected with an appropriate error.
+12. **`unit_test_withdrawal_from_zero`**: Verifies that attempting to withdraw more than the account balance results in an "Insufficient funds" error.
+13. **`unit_test_addition_overflow`**: Tests the handling of arithmetic overflow during deposit, expecting an addition overflow error.
+14. **`unit_test_decimal_precision`**: Ensures correct handling of decimal precision in transactions, including rounding effects.
+15. **`unit_test_subrtaction_overflow`**: Checks if the engine handles subtraction overflow correctly during a dispute operation.
+
+NOTE: unit tests should use directly the `EngineStateTransitionFunctions` api implemented by the `Engine`  and skip `read_and_process_transactions_from_csv`, but the deserialization logic here is simple enough that using it makes the 
+tests more readable as we can write the input directly in the test code as CSV.
+
+### Regression tests:
+1. **`reg_test_from_csv_file_basic`**: Processes transactions from a CSV file to test basic functionality with multiple accounts.
+2. **`reg_test_from_csv_file_disputed`**: Tests dispute and chargeback operations from CSV file input, ensuring correct account states post-transaction.
+3. **`reg_test_from_csv_file_error_conditions`**: Tests the handling of several erroneous transactions from a CSV file
+4. **`reg_test_from_csv_file_malformed`**: Tests that processing a CSV file with malformed records results in the expected errors
+5. **`reg_test_load_from_previous_session_csv`**: Tests loading transactions and accounts from CSV files into the `Engine` nad verifiy the content is correct.
+6. **`reg_test_serdesr_engine`**: Tests the correctness of serialization and deserialization of the `Engine` to and from CSV files
+7. **`reg_test_engine_consistency_with_concurrent_processing`**: Test that the engine produces consistent results even when processing transactions concurrently.
