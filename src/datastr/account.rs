@@ -4,7 +4,10 @@ use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use std::io::Write;
 
-use super::{deser::{deserialize_account_amount, deserialize_trimmed_string}, transaction::ClientId};
+use super::{
+    deser::{deserialize_account_amount, deserialize_trimmed_string},
+    transaction::ClientId,
+};
 
 // Represents an account
 #[derive(Debug, Default, Clone, Deserialize, Serialize, PartialEq)]
@@ -18,7 +21,6 @@ pub struct Account {
     #[serde(deserialize_with = "deserialize_trimmed_string::<bool,_>")]
     pub locked: bool,
 }
-
 
 /// Writes the final state of all accounts to stdout as a CSV file.
 ///

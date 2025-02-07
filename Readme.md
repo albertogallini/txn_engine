@@ -197,7 +197,7 @@ Error: Some errors occurred while processing transactions:
 ```
 
 ### Memory Efficiency
-The engine is designed to be memory efficient, processing transactions through buffering the input csv stream to ensure scalability even with large datasets. See `read_and_process_transactions` in `./src/utility.rs`
+The engine is designed to be memory efficient, processing transactions through buffering the input csv stream to ensure scalability even with large datasets. See `read_and_process_transactions` in `./src/engine.rs`
 
 ### Concurrency Management
 In spite of `./src/main.rs` implementing a single process that reads sequentially from an input CSV stream, the internal `Engine` is designed to support concurrent input transaction streams. Incorporating `DashMap` into the `Engine` struct for managing `accounts` and `transaction_log` provides a concurrent, thread-safe hash map implementation that significantly enhances our system's performance and scalability. <u>By allowing multiple threads to read or write to different entries simultaneously without explicit locking, `DashMap` reduces lock contention: Instead of locking the entire map or individual entries, `DashMap` uses fine-grained locking internally (i.e sharded locking'), reducing contention when many threads are accessing different parts of the data map. It improves memory efficiency, and simplifies the codebase, making it easier to manage concurrent operations across potentially thousands of client transactions</u>. This choice supports the goal of creating a high-throughput, low-latency transaction processing system that can scale with demand, all while maintaining code maintainability.<br>
@@ -213,11 +213,11 @@ In spite of `./src/main.rs` implementing a single process that reads sequentiall
     - Familiar API: DashMap provides an API very similar to HashMap, making it easier for developers familiar with HashMap to transition or use interchangeably in many cases.
     - Iterator Support: It supports iterators, including those that are safe for concurrent use (iter()), which simplifies working with map data in a thread-safe manner.   
 
-See also `test_engine_consistency_with_concurrent_processing` test case in `/tests/test.rs`
+See also `reg_test_engine_consistency_with_concurrent_processing` test case in `/tests/test.rs`
 
 ### Generalization of Disputes:
 - Deposits: When disputing a deposit, you would move the disputed amount from available to held. This keeps the total the same since you're just reallocating the funds.
-- Withdrawals: When disputing a withdrawal, the process is similar but with a twist: the amount held would indeed be *negative* because it represents money that was taken out (withdrawn) from the account but is now under dispute. Holding a negative amount means you're reserving the possibility that this withdrawal could be reversed, effectively increasing the account's available balance by this negative (or positive in terms of adding back) amount while the dispute is unresolved. Details:
+- Withdrawals: When disputing a withdrawal, the process is similar but with a twist: the amount held would indeed be *negative* because it represents money that was taken out (withdrawn) from the account but is now under dispute. Holding a negative amount means we are reserving the possibility that this withdrawal could be reversed, effectively increasing the account's available balance by this negative (or positive in terms of adding back) amount while the dispute is unresolved. Details:
 
   - For a Disputed Deposit:
     - Available: Decreases by the disputed amount.

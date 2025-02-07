@@ -126,6 +126,44 @@ fn unit_test_dispute_deposit_after_withdrawal() {
 }
 
 #[test]
+fn unit_test_double_dispute() {
+    let mut temp_file = NamedTempFile::new().unwrap();
+    let csv_content = r#"type,client,tx,amount,\n
+                                deposit,1,1,10.0000,\n
+                                deposit,1,2,20.0000,\n
+                                withdrawal,1,3,5.0000,\n;
+                                dispute,1,3,,\n
+                                dispute,1,2,,\n"#;
+
+    write!(temp_file, "{}", csv_content).unwrap();
+    let input_path = temp_file.path().to_str().unwrap();
+
+    let mut engine = Engine::default();
+    match engine.read_and_process_transactions_from_csv(input_path, BUFFER_SIZE) {
+        Ok(()) => {}
+        Err(e) => eprintln!(" Some error occurred while processing transactions: {}", e),
+    }
+
+    assert_eq!(engine.accounts.len(), 1, "There should be one account");
+    let account = engine.accounts.get(&1).expect("Account 1 should exist");
+    assert_eq!(
+        account.total,
+        Decimal::from_str("25.0000").unwrap(),
+        "Total should remain 25 after dispute"
+    );
+    assert_eq!(
+        account.available,
+        Decimal::from_str("10.0000").unwrap(),
+        "Available should be 10 after dispute"
+    );
+    assert_eq!(
+        account.held,
+        Decimal::from_str("15.0000").unwrap(),
+        "Held should be 15 after dispute"
+    );
+}
+
+#[test]
 fn unit_test_txid_reused_after_dispute_and_resolve() {
     let mut temp_file = NamedTempFile::new().unwrap();
     let csv_content = r#"type,client,tx,amount,\n
