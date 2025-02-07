@@ -70,18 +70,13 @@ impl From<csv::Error> for EngineSerDeserError {
 }
 
 pub trait EngineFunctions {
-    fn read_and_process_transactions<R: Read>(
-        &self,
-        stream: R,
-        buffer_size: usize,
-    ) -> Result<(), TransactionProcessingError>;
     fn read_and_process_transactions_from_csv(
-        &self,
+        &mut self,
         input_path: &str,
         buffer_size: usize,
     ) -> Result<(), TransactionProcessingError>;
     fn load_from_previous_session_csvs(
-        &self,
+        &mut self,
         transactions_file: &str,
         accounts_file: &str,
     ) -> Result<(), EngineSerDeserError>;
@@ -209,58 +204,13 @@ impl Engine {
     fn safe_sub(a: &Decimal, b: &Decimal) -> Result<Decimal, EngineError> {
         a.checked_sub(*b).ok_or(EngineError::SubtractionOverflow)
     }
-}
-
-impl EngineFunctions for Engine {
-    /// Estimates the memory size of the `Engine` including all its data structures.
-    ///
-    /// This method provides an APPROXIMATE size in bytes since it can't account for
-    /// all memory overheads like those in hashmaps or other complex data structures.
-    ///
-    /// # Returns
-    /// - `usize`: The estimated size in bytes.
-    fn size_of(&self) -> usize {
-        let mut size = std::mem::size_of_val(self);
-
-        size += self.accounts.len()
-            * (std::mem::size_of::<ClientId>() + std::mem::size_of::<Account>());
-
-        size += self.transaction_log.len()
-            * (std::mem::size_of::<TxId>() + std::mem::size_of::<Transaction>());
-
-        size
-    }
-
-    /// Reads transactions from a CSV file and processes them in batches.
-    ///
-    /// The transactions are read from the file in chunks of `BUFFER_SIZE` and processed
-    /// by calling `read_and_process_transactions` on the `Engine` instance.
-    ///
-    /// # Parameters
-    /// - `input_path`: The path to the CSV file to read from.
-    ///
-    /// # Returns
-    /// - `Ok(())`: If all transactions are processed successfully.
-    /// - `Err(TransactionProcessingError)`: If any errors occur while reading
-    ///   from the file or processing transactions.
-    fn read_and_process_transactions_from_csv(
-        &self,
-        input_path: &str,
-        buffer_size: usize,
-    ) -> Result<(), TransactionProcessingError> {
-        let file = File::open(input_path).map_err(|e| {
-            TransactionProcessingError::MultipleErrors(vec![format!("Error opening file: {}", e)])
-        })?;
-        let reader = BufReader::new(file);
-
-        // Call the method from the Engine struct
-        self.read_and_process_transactions(reader, buffer_size)
-    }
 
     /// Reads transactions from a stream in chunk and processes them.
     ///
     /// This method is designed to handle large inputs by reading in chunks,
     /// allowing for control over memory usage based on the provided batch size.
+    /// NOTE: referce to self is not mutable as this specific implementation only change dashmap which are thread-safe
+    /// and it is safe to call this functions form multiple threads concurrently.
     ///
     /// # Parameters
     /// - `stream`: Any type that implements `Read`, providing the transaction data.
@@ -269,7 +219,7 @@ impl EngineFunctions for Engine {
     /// # Returns
     /// - `Ok(())` if all transactions are processed without errors.
     /// - `Err(TransactionProcessingError)` if any errors occur during processing or reading.
-    fn read_and_process_transactions<R: Read>(
+    pub fn read_and_process_transactions<R: Read>(
         &self,
         stream: R,
         buffer_size: usize,
@@ -318,6 +268,49 @@ impl EngineFunctions for Engine {
             Ok(())
         }
     }
+}
+
+impl EngineFunctions for Engine {
+    /// Estimates the memory size of the `Engine` including all its data structures.
+    ///
+    /// This method provides an APPROXIMATE size in bytes since it can't account for
+    /// all memory overheads like those in hashmaps or other complex data structures.
+    ///
+    /// # Returns
+    /// - `usize`: The estimated size in bytes.
+    fn size_of(&self) -> usize {
+        let mut size = std::mem::size_of_val(self);
+
+        size += self.accounts.len()
+            * (std::mem::size_of::<ClientId>() + std::mem::size_of::<Account>());
+
+        size += self.transaction_log.len()
+            * (std::mem::size_of::<TxId>() + std::mem::size_of::<Transaction>());
+
+        size
+    }
+
+    /// Reads transactions from a CSV file and processes them using the Engine.
+    ///
+    /// # Parameters
+    /// - `input_path`: The path to the CSV file containing the transactions.
+    /// - `buffer_size`: The number of records to buffer while processing to ensure memory efficiency.
+    ///
+    /// # Returns
+    /// - `Result<(), TransactionProcessingError>`: `Ok(())` if the transactions are processed successfully, `Err(TransactionProcessingError)` if errors occur while processing.
+    fn read_and_process_transactions_from_csv(
+        &mut self,
+        input_path: &str,
+        buffer_size: usize,
+    ) -> Result<(), TransactionProcessingError> {
+        let file = File::open(input_path).map_err(|e| {
+            TransactionProcessingError::MultipleErrors(vec![format!("Error opening file: {}", e)])
+        })?;
+        let reader = BufReader::new(file);
+
+        // Call the method from the Engine struct
+        self.read_and_process_transactions(reader, buffer_size)
+    }
 
     /// Loads transactions and accounts from CSV files dumped from a previous session to populate the internal maps.
     ///
@@ -336,7 +329,7 @@ impl EngineFunctions for Engine {
     /// # Returns
     /// - `Result<(), EngineError>`: Ok if loading was successful, or an error if there were issues with file reading or parsing.
     fn load_from_previous_session_csvs(
-        &self,
+        &mut self,
         transactions_path: &str,
         accounts_path: &str,
     ) -> Result<(), EngineSerDeserError> {
@@ -406,17 +399,16 @@ impl EngineFunctions for Engine {
         Ok(())
     }
 
-    /// Outputs the final state of all accounts to a CSV file after processing is complete.
+    /// Dumps the current state of all accounts to a CSV writer.
     ///
-    /// The order of the columns is:
-    /// - client: The client ID.
-    /// - available: The available balance for the client.
-    /// - held: The held balance for the client.
-    /// - total: The total balance for the client.
-    /// - locked: Whether the account is locked.
+    /// The CSV writer is wrapped with a `BufWriter` to improve performance and the memory usage.
+    /// The `buffer_size` parameter specifies the size of the buffer to use.
+    ///
+    /// The first line of the CSV file is the header row, containing the column names:
+    /// `client`, `available`, `held`, `total`, and `locked`.
     ///
     /// # Errors
-    /// - `Box<dyn std::error::Error>` if any errors occur while writing to the CSV file.
+    /// - `Box<dyn std::error::Error>` if any errors occur while writing to the writer.
     fn dump_account_to_csv<W: Write>(
         &self,
         writer: W,
@@ -435,18 +427,17 @@ impl EngineFunctions for Engine {
         Ok(())
     }
 
-    /// Dumps the transaction log to a CSV file.
+    /// Dumps the current state of all transactions to a CSV file.
     ///
-    /// This function writes the transaction log to the file at the provided path.
-    /// The CSV file includes the transaction type, client ID, transaction ID, amount, and
-    /// the disputed status of each transaction.
+    /// The first line of the CSV file is the header row, containing the column names:
+    /// `type`, `client`, `tx`, `amount`, and `disputed`.
     ///
     /// # Parameters
-    /// - `transactions_path`: The path to the CSV file to write the transaction log to.
+    /// - `transactions_path`: Path to the CSV file to write to.
+    /// - `buffer_size`: Size of the buffer to use for writing to the file.
     ///
-    /// # Returns
-    /// - `Ok(())` if the transaction log is written to the file successfully.
-    /// - `Err(EngineError)` if there is an error writing to the file.
+    /// # Errors
+    /// - `Box<dyn std::error::Error>` if any errors occur while writing to the file.
     fn dump_transaction_log_to_csvs(
         &self,
         transactions_path: &str,

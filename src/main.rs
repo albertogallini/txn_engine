@@ -98,7 +98,7 @@ fn process_normal(
 /// - The temporary file is automatically deleted when the function returns.
 /// - The performance metrics are printed to stderr.
 fn process_stress_test(num_transactions: usize) -> Result<(), Box<dyn std::error::Error>> {
-    let engine = Engine::default();
+    let mut engine = Engine::default();
     let start_time = Instant::now();
     let mut system = System::new_all();
     let start_memory = get_current_memory(&mut system);

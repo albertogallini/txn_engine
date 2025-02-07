@@ -105,12 +105,12 @@ This project consists of a set of key components, each responsible for different
 - **`get_current_memory`**:Retrieves the memory usage of the current process.
 
 #### `enige.rs` 
-- Key Methods in `Engine` and Complexity Analysis
+- Main Methods in `Engine` and implementation of `EngineFunctions` and `EngineStateTransitionFunctions` for `Engine and Complexity Analysis:
 
   - **`new`**: Initializes a new engine instance. 
   - **`check_transaction_semantic`**: Verifies the semantic validity of transactions, ensuring they adhere to business rules. <i>**Complexity: `O(1)`, memory space`n/a`**</i>
   - **`safe_add` / `safe_sub`**: Performs arithmetic operations safely, preventing overflow errors. <i>**Complexity: `O(1)`, memory space`n/a`**</i>
-  - **`process_transaction`**: Dispatches a transaction to the appropriate processing function based on its type.<i>**Complexity: `O(1)`, memory space`n/a`**</i>
+  - **`process_transaction`**: Dispatches a transaction to the appropriate processing function based on its type.<i>**Complexity: `O(1)`, memory space`n/a`**</i> 
   - **`size_of`**: Estimates the memory usage of the engine and its data structures.<i>**Complexity: `O(1)`, memory space`n/a`**</i>
   - **`read_and_process_transactions_from_csv`**: Reads transactions from a CSV file and use the Engine instance passed as input parameter to processes them. It calls `read_and_process_transactions`.
   - **`read_and_process_transactions`**: Reads transactions from a input stream and dispatches them for processing by the engine.<i>**Complexity: time `O(n)`, memory space`O(n)`**</i>
@@ -123,15 +123,15 @@ This project consists of a set of key components, each responsible for different
   - The Engine internal state is handled by two DashMaps `accounts` and `transaction_log`. When considering DashMap, operations like insertion, lookup, and removal are generally O(1) in terms of time complexity, thanks to its concurrent hash map implementation. However, under heavy contention or in worst-case scenarios, performance can degrade due to the lock mechanism. See <i>Concurrency Management</i> section.
   - CSV Operations: File I/O operations can introduce variability due to disk I/O, but from an algorithmic standpoint, reading or writing each record is considered O(1) per operation.
 
-- `EngineFunctions` and `EngineStateTransitionFunctions` trait
+- `EngineFunctions` and `EngineStateTransitionFunctions` traits:
 
   - The `EngineStateTransitionFunctions` trait provides a set of functions that can be called on the `Engine` struct internally. These functions are not public and  allow clients to interact with the Engine and perform operations such as:
-    - **process_transaction**: To handle common actions across all the transactions type and dispach to specifc methods.
-    - **deposit**: Deposits a certain amount of funds into a client's account.
-    - **withdraw**: Withdraws a certain amount of funds from a client's account. 
-    - **dispute**: Disputes a transaction marking it as `disputed`. 
-    - **resolve**: Resolves a dispute, releasing the `disputed` transaction. 
-    - **chargeback**: Reverses a disputed transaction, effectively removing the associated funds from the client's account and locking the account.
+    - **`process_transaction`**: To handle common actions across all the transactions type and dispach to specifc methods.
+    - **`process_deposit`**: Deposits a certain amount of funds into a client's account.
+    - **`process_withdraw`**: Withdraws a certain amount of funds from a client's account. 
+    - **`process_dispute`**: Disputes a transaction marking it as `disputed`. 
+    - **`process_resolve`**: Resolves a dispute, releasing the `disputed` transaction. 
+    - **`process_chargeback`**: Reverses a disputed transaction, effectively removing the associated funds from the client's account and locking the account.
 
   - The `EngineFunctions` trait provides the following public methods to interact with the Engine and operate on the internal state:
     - **`read_and_process_transactions_from_csv`**: Reads transactions from a CSV file and processes them using the Engine.
