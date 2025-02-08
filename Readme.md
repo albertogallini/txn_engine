@@ -134,7 +134,7 @@ The separation of public and private functions in the `Engine` struct is achieve
   - The `EngineFunctions` trait provides the following **public** methods to interact with the Engine and operate on the internal state:
     - **`read_and_process_transactions`**: Reads transactions from a stream and processes them.
     - **`read_and_process_transactions_from_csv`**: Reads transactions from a CSV file and processes them using `read_and_process_transactions`.
-    - **`load_from_previous_session_csvs`**: Loads transactions and accounts from CSV files dumped from a previous session to populate the internal maps. (This functionality is public but not exposed)
+    - **`load_from_previous_session_csvs`**: Loads transactions and accounts from CSV files dumped from a previous session to populate the internal maps. (This functionality is public but not exposed as command line pramenter)
     - **`dump_transaction_log_to_csv`**: Dumps the `transaction_log` to a CSV file.
     - **`dump_account_to_csv`**: Outputs the final state of all accounts to a CSV file after processing is complete.
 
@@ -155,7 +155,7 @@ Here below a simplified diagram of the main structs and relationships:<br>
 The system includes comprehensive error handling with specific error messages for various conditions like insufficient funds, account not found, and transaction disputes.
 The system handles the following error conditions:
 
-Semantic errors - error condition on transaction semantic:<br>
+Semantic errors - error conditions on transaction semantic:<br>
 
 - **EngineError::DifferentClient**: If a dispute/resolve/chargeback is attempted on a transaction from a different client.
 - **EngineError::NoAmount**: If a transaction does not have an amount.
@@ -171,7 +171,7 @@ Semantic errors - error condition on transaction semantic:<br>
 - **EngineError::TransactionAlreadyDisputed**: If a dispute is attempted on an already disputed transaction.
 - **EngineError::TransactionNotDisputed**: If a resolve or chargeback is attempted on a non-disputed transaction.<br>
 
-I/O Error - deserialization of Engine internal state from a previous session dump<br>
+I/O Error occurring during sereliazion/deserialization<br>
 - **EngineSerDeserError::Io**: I/O error while reading a previous session dump.
 - **EngineSerDeserError::Csv**: Parsing error while reading a previous session session csv dump
 - **EngineSerDeserError::InvalidClientId**: Parsing error while reading a previous session csv -> InvalidClientId
