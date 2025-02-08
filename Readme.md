@@ -228,8 +228,8 @@ NOTES:
 
     Conversely, a transaction of stream A may affect the account of a client on stream B, and - as the concurrent execution cannot guarantee the order of the transaction processing - this 
     leads to non-deterministic account balance values. Or, simply, a transaction may fail as another with the same id has been already processed, leading to non-deterministic 
-    outcomes as well. See also `generate_random_transaction_concurrent_stream` in `./src/utility.rs`. Please also check `reg_test_engine_consistency_with_concurrent_processing` test case
-    in `/tests/test.rs` and `read_and_process_transactions` method in  `Engine` and `EngineFunctions`.
+    outcomes as well. See also `generate_random_transaction_concurrent_stream` in `./src/utility.rs` and `reg_test_engine_consistency_with_concurrent_processing` test case
+    in `/tests/test.rs`.
 
 - Input stream abstraction (i.e. the `std::io::Read` trait ) is good for reusability as we can pass to `read_and_process_transactions` whatever input source implements `std::io::Read` e.g.:
 
