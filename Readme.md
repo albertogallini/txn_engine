@@ -327,8 +327,8 @@ This function is useful to easily test some edge cases that are not possible if 
 transactions. E.g. see `unit_test_subrtaction_overflow` test case.<br>
 `load_from_previous_session_csvs` is much faster than `read_and_process_transactions` as there is no semantic check. It is a *blind* decoding of the internal Engine maps dump. For this reason, it 
 is a potentially dangerous functionality and if used in production (e.g.: to quickly restore an instance of the service ***without reading the entire transaction history since inception***), it must be guaranteed 
-the input files have not been modified after being created by the process.<br>
-Furthermore, to use such a functionality in a production environment, the dumped files should be equipped with metadata about the creation time and encoder versioning and logic (to handle the ser/deser backward compatibility with further txn_engine releases).
+the input files have not been modified after being created by the process (e.g. using hashing functions)<br>
+Furthermore, to use such a functionality in a production environment, the dumped files should be equipped with metadata about the creation time and encoder versioning and logic (to handle the ser/deser backward compatibility with further txn_engine releases).<br>
 A possible scenario to use this functionality is to store every day - at the end of the day - the snapshot of accounts and transactions log. So if the next day a txn_engine has to be restarted it can load from the yesterday snapshot and then reconstruct the 
 correct current status loading just the transactions of the current day. Which is computationally sustainable: see performance analysis in the next section.
 
