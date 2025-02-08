@@ -415,13 +415,11 @@ The plots also show that both time and memory scale as O(n).
     *17.000 x 1024 x 64 Gb  = 1.114.112.000 transactions (i.e. ~**1B**)*<br>
     can be managed on a commodity machine equipped with 64Gb. So **sharding the client Ids across multiple nodes** and making them sticky to a specific node (e.g. using consistent hashing) with a farm of N commodity nodes we can  manage N Billions transactions in terms of memory footprint. 
   - In a production enviroment the engine processes should be restarted regularly (e.g.: every day): at each restart the process should load from previous session.
-  - In a production enviroment the engine processes should regularly store the maps content on disk or DB to recover from crashes. (See also further enhancements).
-  - In a production enviroment a reasonable assumption is that we can discard transactions older than a certain number of days (**K**), as we won't allow disputes on transactions older than that, otherwise the memory will grow indefinitely.
+  - In a production enviroment a reasonable assumption is that we can discard (i.e. not loading inthe `transaction_log` anymore) transactions older than a certain number of days (**K**), as we won't allow disputes on transactions older than that, otherwise the memory will grow indefinitely. If a dispute for a transaction older than K days is received, it will simply discarded.
   - 200 transactions per client per day (which is a very high value)
   - Assuming K = 30 days.
 
 - The solution scales horizontally as follows
-  
   - 200 x 30 days  = 6.000 transactions per client per period have to be stored
   - 1B / 6.000 =  166.666 = ~166.000 (for simplicity) clients per machine.
   - We can add a node increasing throughput and without sacrificing latency, e.g.: a farm with 100 64Gb nodes can manage 16.6 M clients.
@@ -429,7 +427,9 @@ The plots also show that both time and memory scale as O(n).
 - The solution scales vertically as follows
   - increase the node memory will allow to manage more clients per node. e.g.: 256 Gb memory will allow to manage 16.6 x 4 =~ 66 M clients (which is in line with the # of customers of biggest retail banks on earth)
 
-In a real-world solution, it's important to implement logic to periodically store the Engine state on disk or in a database, and keep only the most active users in memory by implementing lazy write caching logic. This will reduce the process memory footprint, allowing more clients per node and making the service safer, as transactions will be stored persistently to recover the status in case of a crash.
+#### Consideration about persistency and caching: 
+In a real-world solution, it's important to store and keep the `Engine` state persistent on disk or in a database to recover the status in case of a crash. Additionally, the `Engine` could keep only the most active users in memory by ***implementing a caching logic***. This will reduce the process memory footprint, allowing more clients per node.<br>
+As all the transaction types modify the account balance, consistency is critical, and the most suitable caching writing logic is `Write Through`: every write to the cache is immediately written to the persistent storage, ensuring data consistency, but at the cost of performance.
 
 ## Regression and Unit Tests
 
