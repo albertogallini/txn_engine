@@ -351,16 +351,18 @@ Reasons to use serde:
 
 ## Stress Test script & performance measure:
 
-The stress_test.sh script runs the program with increasing numbers of transactions and measures execution time and memory consumption. 
+The `stress_test.sh` script runs the program with increasing numbers of transactions and measures execution time and memory consumption. 
 The `generate_random_transactions` function is used by the `stress-test` mode of the `txn_engine` to generate random transactions in the CSV format. It takes in two parameters: the number of transactions to generate and the output file path.
 
-The function works as follows:
+The `generate_random_transactions` function works as follows:
 - It opens the output file using the provided path.
 - It writes the header line to the file with the column names.
 - For each transaction, it randomly selects a type (deposit, withdrawal, dispute, resolve, chargeback), a client ID between 1 and 1.000.000 and a transaction id between 1 and 10.000.000
-- For deposit and withdrawal transactions, it generates a random amount between 0.0 and 100.0000.0.
+- For deposit and withdrawal transactions, it generates a random amount between 0.0 and 100.000.
 - It writes each transaction line to the file.
-- Then it loops from 100 to 1000100 transactions in steps of 100 and measures the time and memory consumption of the program. The output is written to stress_test_results.txt in the format `Transactions Count, Time, Process Memory (MB), Engine Memory (MB)`.
+
+The `stress_test.sh` script  loops from 100 to 2.000.100 transactions in steps of 100.000 and measures the time and memory consumption of the program. 
+The output is written to stress_test_results.txt in the format `Transactions Count, Time, Process Memory (MB), Engine Memory (MB)`.
 
 Note: The `generate_random_transactions` function is not meant to mimic real-world transactions since it generates random transactions without any ordering or dependencies. This results in a <b>higher number of error conditions</b> compared to real-world use cases and as a consequence the number of entry in both the `transaction_log` and `account` maps will be lower than real-world use case. But it is good enough to see how the system resources are used increasing the size of the input, especially to check if there is a trend that is not coeherent with the complexity analysis.
 
