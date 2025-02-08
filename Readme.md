@@ -231,7 +231,7 @@ NOTES:
     outcomes as well. See also `generate_random_transaction_concurrent_stream` in `./src/utility.rs` and `reg_test_engine_consistency_with_concurrent_processing` test case
     in `/tests/test.rs`.
 
-- Input stream abstraction (i.e. the `std::io::Read` trait ) is good for reusability as we can pass to `read_and_process_transactions` whatever input source implements `std::io::Read` e.g.:
+- Input stream abstraction (i.e. the `std::io::Read` trait) is good for reusability as we can pass to `read_and_process_transactions` whatever input source implements `std::io::Read` e.g.:
 
   - file streams
     ```
@@ -302,8 +302,7 @@ NOTES:
     - Held: Decreases by the disputed amount (negative held).
     - Total: Remains unchanged because you're just moving what was taken out back into a different category (held).
 
-  - Allowing for negative held funds for withdrawals means that if the dispute results in a resolve, you'd decrease the held (which is negative) and increase available, effectively returning the withdrawn money back into available funds.
-   For a chargeback, you'd reduce the total by the (negative) held amount, which means adding the disputed withdrawal back to the account, but since the account is then locked, this might require special handling for accounting or regulatory purposes.
+  - Allowing for negative held funds for withdrawals means that if the dispute results in a resolve, you'd increase the held (which is negative) and decrease available. For a chargeback, you'd reduce the total by the (negative) held amount, which means adding the disputed withdrawal back to the account and then the account is locked (according to the chargeback logic).
 
 - There is no check on the available amount before applying a `Dispute`: disputing a `Deposit` occurred before  a `Withdrawal` may lead to a negative available fund.
 - It is not possible to dispute multiple times the same transaction. This is prevented by the `disputed` flag in the `Transaction` struct.
