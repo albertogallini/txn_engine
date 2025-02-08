@@ -124,7 +124,7 @@ This project consists of a set of key components, each responsible for different
 
   - General Notes about ***Complexity Analysis***:
     - The complexity analysis on the `Engine` is exhaustive to evaluate the `txn_engine` process as it includes all the core functionalities.
-    - The Engine internal state is handled by two DashMaps `accounts` and `transaction_log`. When considering DashMap, operations like insertion, lookup, and removal are generally O(1) in terms of time complexity, thanks to its concurrent hash map implementation. However, under heavy contention or in worst-case scenarios, performance can degrade due to the lock mechanism. See *Concurrency Management* section.
+    - The Engine internal state is handled by two DashMaps `accounts` and `transaction_log`. When considering DashMap, operations like insertion, lookup, and removal are generally O(1) in terms of time complexity. However, under heavy contention or in worst-case scenarios, performance can degrade due to the locking mechanism. See *Concurrency Management* section.
     - CSV Operations: File I/O operations can introduce variability due to disk I/O, but from an algorithmic standpoint, reading or writing each record is considered O(1) per operation.
 
 #### `EngineFunctions` and `EngineStateTransitionFunctions` traits:
@@ -132,8 +132,8 @@ This project consists of a set of key components, each responsible for different
 The separation of public and private functions in the `Engine` struct is achieved using two distinct traits: `EngineFunctions` for public APIs and `EngineStateTransitionFunctions` for internal state management, which enhances clarity, reduces complexity, and improves security by preventing unintended modifications.
 
   - The `EngineFunctions` trait provides the following **public** methods to interact with the Engine and operate on the internal state:
-    - **`read_and_process_transactions`**: Reads transactions from a stream and processes them using the `Engine` private function `read_and_process_transactions`.
-    - **`read_and_process_transactions_from_csv`**: Reads transactions from a CSV file and processes them using the `Engine` private function `read_and_process_transactions`.
+    - **`read_and_process_transactions`**: Reads transactions from a stream and processes them.
+    - **`read_and_process_transactions_from_csv`**: Reads transactions from a CSV file and processes them using `read_and_process_transactions`.
     - **`load_from_previous_session_csvs`**: Loads transactions and accounts from CSV files dumped from a previous session to populate the internal maps. (This functionality is public but not exposed)
     - **`dump_transaction_log_to_csv`**: Dumps the `transaction_log` to a CSV file.
     - **`dump_account_to_csv`**: Outputs the final state of all accounts to a CSV file after processing is complete.

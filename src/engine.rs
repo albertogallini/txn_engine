@@ -209,6 +209,27 @@ impl Engine {
     fn safe_sub(a: &Decimal, b: &Decimal) -> Result<Decimal, EngineError> {
         a.checked_sub(*b).ok_or(EngineError::SubtractionOverflow)
     }
+}
+
+impl EngineFunctions for Engine {
+    /// Estimates the memory size of the `Engine` including all its data structures.
+    ///
+    /// This method provides an APPROXIMATE size in bytes since it can't account for
+    /// all memory overheads like those in hashmaps or other complex data structures.
+    ///
+    /// # Returns
+    /// - `usize`: The estimated size in bytes.
+    fn size_of(&self) -> usize {
+        let mut size = std::mem::size_of_val(self);
+
+        size += self.accounts.len()
+            * (std::mem::size_of::<ClientId>() + std::mem::size_of::<Account>());
+
+        size += self.transaction_log.len()
+            * (std::mem::size_of::<TxId>() + std::mem::size_of::<Transaction>());
+
+        size
+    }
 
     /// Reads transactions from a stream in chunk and processes them.
     ///
@@ -272,47 +293,6 @@ impl Engine {
         } else {
             Ok(())
         }
-    }
-}
-
-impl EngineFunctions for Engine {
-    /// Estimates the memory size of the `Engine` including all its data structures.
-    ///
-    /// This method provides an APPROXIMATE size in bytes since it can't account for
-    /// all memory overheads like those in hashmaps or other complex data structures.
-    ///
-    /// # Returns
-    /// - `usize`: The estimated size in bytes.
-    fn size_of(&self) -> usize {
-        let mut size = std::mem::size_of_val(self);
-
-        size += self.accounts.len()
-            * (std::mem::size_of::<ClientId>() + std::mem::size_of::<Account>());
-
-        size += self.transaction_log.len()
-            * (std::mem::size_of::<TxId>() + std::mem::size_of::<Transaction>());
-
-        size
-    }
-
-    /// Reads transactions from an input stream and processes them using the Engine.
-    ///
-    ///
-    /// # Parameters
-    /// - `stream`: Any type that implements `Read`, providing the stream to read from.
-    ///    It is NOT mutable as this function is thread-safe.
-    /// - `buffer_size`: The size of the internal buffer used to read from the stream.
-    ///
-    /// # Returns
-    /// - `Result<(), TransactionProcessingError>`: Returns `Ok(())` if all transactions
-    ///   are processed successfully, or `Err(TransactionProcessingError)` if any
-    ///   errors occur during processing.
-    fn read_and_process_transactions<R: Read>(
-        &self,
-        stream: R,
-        buffer_size: usize,
-    ) -> Result<(), TransactionProcessingError> {
-        self.read_and_process_transactions(stream, buffer_size)
     }
 
     /// Reads transactions from a CSV file and processes them using the Engine.
