@@ -101,12 +101,12 @@ This project consists of a set of key components, each responsible for different
 #### `utility.rs` 
 
 - **`generate_random_transactions`**: Creates a CSV file with randomly generated transactions for stress testing purposes.
-- **`generate_deposit_withdrawal_transactions`**: Generates a specified number of random  deposit/withdrawal transactions and writes them to a temporary CSV file for testing concurrency on `Engine` insances.
+- **`generate_random_transaction_concurrent_stream`**: Generates a specified number of random transactions suitable for concurrency and writes them to a temporary CSV file for testing concurrency on `Engine` insances.
 - **`get_current_memory`**:Retrieves the memory usage of the current process.
 
 #### `enige.rs` 
 - Main Methods in `Engine` and its implementation of `EngineFunctions` and `EngineStateTransitionFunctions` traits:
-  - **`read_and_process_transactions_from_csv`**: Reads transactions from a CSV file and processes them. It calls `read_and_process_transactions`.
+  - **`read_and_process_transactions_from_csv`**: Reads transactions from a CSV file and processes them. It calls `read_and_process_transactions`.***Complexity: time `O(n)`, memory space`O(n)`***
   - **`read_and_process_transactions`**: Reads transactions from a input stream and dispatches them for processing by the engine.***Complexity: time `O(n)`, memory space`O(n)`***
   - **`load_from_previous_session_csvs`**: Loads **n** transactions and **m** accounts  from CSV files dumped from a previous session to populate the internal maps.***Complexity: `O(n+m)`, memory space`O(n+m)`*** 
   - **`process_transaction`**: Dispatches a transaction to the appropriate processing function based on its type.***Complexity: `O(1)`, memory space`n/a`*** 
@@ -124,7 +124,8 @@ This project consists of a set of key components, each responsible for different
 - `EngineFunctions` and `EngineStateTransitionFunctions` traits:
 
   - The `EngineFunctions` trait provides the following **public** methods to interact with the Engine and operate on the internal state:
-    - **`read_and_process_transactions_from_csv`**: Reads transactions from a CSV file and processes them using the Engine.
+    - **`read_and_process_transactions`**: Reads transactions from a stream and processes them using the `Engine` private function `read_and_process_transactions`.
+    - **`read_and_process_transactions_from_csv`**: Reads transactions from a CSV file and processes them using the `Engine` private function `read_and_process_transactions`.
     - **`load_from_previous_session_csvs`**: Loads transactions and accounts from CSV files dumped from a previous session to populate the internal maps. (This functionality is public but not exposed)
     - **`dump_transaction_log_to_csv`**: Dumps the `transaction_log` to a CSV file.
     - **`dump_account_to_csv`**: Outputs the final state of all accounts to a CSV file after processing is complete.
@@ -136,7 +137,6 @@ This project consists of a set of key components, each responsible for different
     - **`process_dispute`**: Disputes a transaction marking it as `disputed`. 
     - **`process_resolve`**: Resolves a dispute, releasing the `disputed` transaction. 
     - **`process_chargeback`**: Reverses a disputed transaction, effectively removing the associated funds from the client's account and locking the account.
-
 
 
 The separation of public and private functions in the `Engine` struct is achieved using two distinct traits: `EngineFunctions` for public APIs and `EngineStateTransitionFunctions` for internal state management, which enhances clarity, reduces complexity, and improves security by preventing unintended modifications.
@@ -152,7 +152,7 @@ The system handles the following error conditions:
 
 Semantic errors - error condition on transaction semantic:<br>
 
-- **EngineError::DifferentClient**: If a dispute or resolve is attempted on a transaction from a different client.
+- **EngineError::DifferentClient**: If a dispute/resolve/chargeback is attempted on a transaction from a different client.
 - **EngineError::NoAmount**: If a transaction does not have an amount.
 - **EngineError::DepositAmountInvalid**: If the amount of a deposit is not greater than 0.
 - **EngineError::WithdrawalAmountInvalid**: If the amount of a withdrawal is not greater than 0.
@@ -199,9 +199,10 @@ Error: Some errors occurred while processing transactions:
 ### Memory Efficiency
 The engine is designed to be memory efficient, processing transactions through buffering the input csv stream to ensure scalability even with large datasets. See `read_and_process_transactions` in `./src/engine.rs`
 
-### Concurrency Management
+### Concurrency Management & input streams (`std::io::Read`)
 In spite of `./src/main.rs` implementing a single process that reads sequentially from an input CSV stream, the internal `Engine` is designed to support concurrent input transaction streams. Incorporating `DashMap` into the `Engine` struct for managing `accounts` and `transaction_log` provides a concurrent, thread-safe hash map implementation that significantly enhances our system's performance and scalability. <u>By allowing multiple threads to read or write to different entries simultaneously without explicit locking, `DashMap` reduces lock contention: Instead of locking the entire map or individual entries, `DashMap` uses fine-grained locking internally (i.e sharded locking'), reducing contention when many threads are accessing different parts of the data map. It improves memory efficiency, and simplifies the codebase, making it easier to manage concurrent operations across potentially thousands of client transactions</u>. This choice supports the goal of creating a high-throughput, low-latency transaction processing system that can scale with demand, all while maintaining code maintainability.<br>
 
+NOTES:
 - Benefits of [`DashMap`](https://docs.rs/dashmap/latest/dashmap/struct.DashMap.html):
   - Concurrency:
     - Lock-Free Reads: DashMap uses a lock-free approach for reading operations, allowing multiple threads to read from the map concurrently without blocking each other.
@@ -213,7 +214,74 @@ In spite of `./src/main.rs` implementing a single process that reads sequentiall
     - Familiar API: DashMap provides an API very similar to HashMap, making it easier for developers familiar with HashMap to transition or use interchangeably in many cases.
     - Iterator Support: It supports iterators, including those that are safe for concurrent use (iter()), which simplifies working with map data in a thread-safe manner.   
 
-See also `reg_test_engine_consistency_with_concurrent_processing` test case in `/tests/test.rs`
+ -  the `read_and_process_transactions` menthod in the `EngineFunctions` (and its impelmentation in `Engine`) offers the necessary abstraction 
+ to process a generic input stream (`std::io::Read`) efficienlty by leveraging on buffering to avoid high memory consumption.
+ 
+ -  To have consistent results processing concurrently multiple transactions streams, the streams:
+    - must have disjoint client id ranges. This is also related to scalabilty, see also the notes about sharding in ***Stress Test script & performance measure*** section.
+    - must have disjoint transaction id ranges.
+
+    Conversely, a transaction of stream A may affect the account of a client on stream B, and - as the concurrent execution cannot guarantee the order of the transaction processing - this 
+    leads to non-deterministic account balance values. Or, simply, a transaction may fail as another with the same id has been already processed, leading to non-deterministic 
+    outcomes as well. See also `generate_random_transaction_concurrent_stream` in `./src/utility.rs`. Please also check `reg_test_engine_consistency_with_concurrent_processing` test case
+    in `/tests/test.rs` and `read_and_process_transactions` method in  `Engine` and `EngineFunctions`.
+
+- Input stream abstraction (i.e. the `std::io::Read` trait ) is good for reusability as we can pass to `read_and_process_transactions` whatever input source implements `std::io::Read` e.g.:
+
+  - file streams
+    ```
+    use std::fs::File;
+
+    let file_path = "path/to/your/file.csv";
+    let file = File::open(file_path).expect("Failed to open file");
+    let engine = Engine::new();
+    engine.read_and_process_transactions(file, 16_384).expect("Failed to process transactions from file");
+
+    ```
+
+  - tcp streams
+    ```
+    use std::net::TcpStream;
+
+    let address = "127.0.0.1:8080";
+    let stream = TcpStream::connect(address).expect("Failed to connect to server");
+    let engine = Engine::new();
+    engine.read_and_process_transactions(stream, 16_384).expect("Failed to process transactions from TCP stream");
+    ```
+
+  - kafka streams (with a wrapper implementation)
+    ```
+    struct KafkaReadWrapper<'a> {
+        consumer: &'a StreamConsumer,
+    }
+
+    impl<'a> Read for KafkaReadWrapper<'a> {
+        fn read(&mut self, buf: &mut [u8]) -> std::io::Result {
+            ...
+    ```
+
+    and 
+
+    ```
+    {
+        // Configure a Kafka consumer
+        let consumer: StreamConsumer = ClientConfig::new()
+            .set("bootstrap.servers", "localhost:9092")
+            .set("group.id", "my-group")
+            .create()
+            .expect("Failed to create consumer");
+
+        consumer.subscribe(&["your-topic"]).expect("Failed to subscribe to topic");
+
+        let engine = Engine::new();
+        let mut kafka_reader = KafkaReadWrapper::new(&consumer);
+
+        // Now you can pass the KafkaReadWrapper to the read_and_process_transactions method
+        engine.read_and_process_transactions(&mut kafka_reader, 16_384)?;
+
+        Ok(())
+    }
+    ```
 
 ### Generalization of Disputes:
 - Deposits: When disputing a deposit, you would move the disputed amount from available to held. This keeps the total the same since you're just reallocating the funds.

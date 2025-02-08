@@ -1,5 +1,4 @@
 use csv::Writer;
-use rand::seq::SliceRandom;
 use rand::{thread_rng, Rng};
 use rust_decimal::prelude::*;
 use std::{collections::HashMap, fs::File, process};
@@ -45,23 +44,25 @@ pub fn generate_random_transactions(
     Ok(())
 }
 
-/// Generates a specified number of random  deposit/withdrawal transactions and writes them to a temporary CSV file.
+/// Generates a specified number of random transactions and writes them to a temporary CSV file.
 ///
-/// This function is used for concurrency testing purposes. It is used to generate simple transaction flow
-/// to test if the engine behaves consistnetly under different conditions or order of transaction executions.
+/// The generated transactions will have a client ID between `start_client_id` and `end_client_id` (inclusive).
+/// The generated transactions will have a transaction ID starting from `start_tx_id` and incrementing by 1 for each
+/// transaction.
+/// This is important to make sure
+/// 1. to isolate the transactions for a group of clients
+/// 2. to shard the transaction id space across concurrent streams.
 ///
-/// # Parameters
-/// - `num_transactions`: The number of transactions to generate.
-/// - `start_tx_id`: The starting transaction ID. The generated transactions will have IDs
-///   starting from this number.
-/// - `start_client_id`: The starting client ID. The generated transactions will have client IDs
-///   starting from this number.
-/// - `end_client_id`: The ending client ID. The generated transactions will have client IDs
-///   less than or equal to this number.
+/// The generated transactions will have a balance per client that is tracked and updated based on the type of transaction.
+/// The balance per client is used to ensure that the generated transactions are valid, i.e. a withdrawal will not be
+/// generated if the balance for the client is 0.
+///
+/// The generated transactions will be written to the temporary file in the order of deposit, withdrawal, dispute, resolve, chargeback.
+/// The transactions will be written in the format `type,client,tx,amount`.
 ///
 /// # Errors
 /// - `Box<dyn std::error::Error>` if any errors occur while writing to the file.
-pub fn generate_deposit_withdrawal_transactions(
+pub fn generate_random_transaction_concurrent_stream(
     num_transactions: usize,
     start_tx_id: u32,
     start_client_id: u16,
@@ -80,34 +81,47 @@ pub fn generate_deposit_withdrawal_transactions(
 
     for i in 0..num_transactions {
         let ty;
-        let mut amount: Decimal;
-
+        let mut amount = Decimal::ZERO;
         // Choose a random client ID
         let client = rng.gen_range(start_client_id..=end_client_id) as u16;
 
         // Get or initialize the balance for the client
-        let balance = client_balances.entry(client).or_insert(Decimal::ZERO);
+        let mut balance = client_balances
+            .entry(client)
+            .or_insert(Decimal::ZERO.checked_add(Decimal::new(1, 1)))
+            .unwrap();
+        let mut tx = start_tx_id + (i as u32);
 
-        // Decide transaction type
-        if *balance == Decimal::ZERO || rng.gen_bool(0.5) {
-            // 50% chance for deposit if balance is zero
-            ty = "deposit";
-            amount = Decimal::new(rng.gen_range(1..1001), 2); // Random amount between 0.01 and 10.00
-            *balance += amount;
-        } else {
-            ty = "withdrawal";
-            amount = Decimal::new(rng.gen_range(1..10), 2); // Random amount between 0.01 and 0.10
-            if amount > *balance {
-                amount = *balance / Decimal::new(2, 2);
+        match rand::random::<u8>() % 5 {
+            0 => {
+                ty = "deposit";
+                amount = Decimal::new(rng.gen_range(1..1001), 2); // Random amount between 0.01 and 10.00
+                balance += amount;
             }
-            if amount == Decimal::ZERO {
-                continue;
+            1 => {
+                ty = "withdrawal";
+                amount = Decimal::new(rng.gen_range(1..10), 2); // Random amount between 0.01 and 0.10
+                if amount > balance {
+                    amount = balance / Decimal::new(2, 2);
+                }
+                if amount == Decimal::ZERO {
+                    continue;
+                }
+                balance -= amount;
             }
-            *balance -= amount;
-        }
-
-        // Generate a sequential transaction ID starting from `start_tx_id`
-        let tx = start_tx_id + (i as u32);
+            2 => {
+                ty = "dispute";
+                tx = rng.gen_range(start_tx_id..=start_tx_id + (i as u32)) as u32;
+            }
+            3 => {
+                ty = "resolve";
+                tx = rng.gen_range(start_tx_id..=start_tx_id + (i as u32)) as u32;
+            }
+            _ => {
+                ty = "chargeback";
+                tx = rng.gen_range(start_tx_id..=start_tx_id + (i as u32)) as u32;
+            }
+        };
 
         transactions.push((
             ty.to_string(),
@@ -117,16 +131,17 @@ pub fn generate_deposit_withdrawal_transactions(
         ));
     }
 
-    // Shuffle transactions to test order invariance but keep the balance consistent
-    transactions.shuffle(&mut rng);
-
     for (ty, client, tx, amount) in transactions {
-        writer.write_record([
-            ty,
-            client.to_string(),
-            tx.to_string(),
-            format!("{:.4}", amount),
-        ])?;
+        if ty == "deposit" || ty == "withdrawal" {
+            writer.write_record([
+                ty,
+                client.to_string(),
+                tx.to_string(),
+                format!("{:.4}", amount),
+            ])?;
+        } else {
+            writer.write_record([ty, client.to_string(), tx.to_string(), "".to_string()])?;
+        }
     }
 
     writer.flush()?;

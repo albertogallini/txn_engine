@@ -13,7 +13,7 @@ use std::io::{BufReader, BufWriter, Read, Write};
 
 #[derive(Debug, Error)]
 pub enum EngineError {
-    #[error("Cannot dispute transaction from a different client")]
+    #[error("Cannot dispute/resolve/chargeback transaction from a different client")]
     DifferentClient,
     #[error("Transaction must have an amount")]
     NoAmount,
@@ -70,6 +70,11 @@ impl From<csv::Error> for EngineSerDeserError {
 }
 
 pub trait EngineFunctions {
+    fn read_and_process_transactions<R: Read>(
+        &self, // self is NOT mutable as this function can be called concurrently and its implementation must be thread-safe.
+        stream: R,
+        buffer_size: usize,
+    ) -> Result<(), TransactionProcessingError>;
     fn read_and_process_transactions_from_csv(
         &mut self,
         input_path: &str,
@@ -219,7 +224,7 @@ impl Engine {
     /// # Returns
     /// - `Ok(())` if all transactions are processed without errors.
     /// - `Err(TransactionProcessingError)` if any errors occur during processing or reading.
-    pub fn read_and_process_transactions<R: Read>(
+    fn read_and_process_transactions<R: Read>(
         &self,
         stream: R,
         buffer_size: usize,
@@ -288,6 +293,26 @@ impl EngineFunctions for Engine {
             * (std::mem::size_of::<TxId>() + std::mem::size_of::<Transaction>());
 
         size
+    }
+
+    /// Reads transactions from an input stream and processes them using the Engine.
+    ///
+    ///
+    /// # Parameters
+    /// - `stream`: Any type that implements `Read`, providing the stream to read from.
+    ///    It is NOT mutable as this function is thread-safe.
+    /// - `buffer_size`: The size of the internal buffer used to read from the stream.
+    ///
+    /// # Returns
+    /// - `Result<(), TransactionProcessingError>`: Returns `Ok(())` if all transactions
+    ///   are processed successfully, or `Err(TransactionProcessingError)` if any
+    ///   errors occur during processing.
+    fn read_and_process_transactions<R: Read>(
+        &self,
+        stream: R,
+        buffer_size: usize,
+    ) -> Result<(), TransactionProcessingError> {
+        self.read_and_process_transactions(stream, buffer_size)
     }
 
     /// Reads transactions from a CSV file and processes them using the Engine.

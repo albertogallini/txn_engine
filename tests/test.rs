@@ -5,7 +5,7 @@ use std::str::FromStr;
 use txn_engine::datastr::account::serialize_account_balances_csv;
 use txn_engine::datastr::transaction::{TransactionProcessingError, TransactionType};
 use txn_engine::engine::{Engine, EngineFunctions};
-use txn_engine::utility::generate_deposit_withdrawal_transactions;
+use txn_engine::utility::generate_random_transaction_concurrent_stream;
 
 use std::io::Write;
 use tempfile::NamedTempFile;
@@ -1080,9 +1080,9 @@ use std::thread;
 fn reg_test_engine_consistency_with_concurrent_processing() {
     const BUF_SIZE: usize = 1024;
     // Generate 3 temp files with consistent random transactions
-    let temp_file1 = generate_deposit_withdrawal_transactions(10000, 0, 1, 10).unwrap();
-    let temp_file2 = generate_deposit_withdrawal_transactions(10000, 10000, 20, 30).unwrap();
-    let temp_file3 = generate_deposit_withdrawal_transactions(10000, 20000, 40, 50).unwrap();
+    let temp_file1 = generate_random_transaction_concurrent_stream(10000, 0, 1, 10).unwrap();
+    let temp_file2 = generate_random_transaction_concurrent_stream(10000, 10001, 200, 300).unwrap();
+    let temp_file3 = generate_random_transaction_concurrent_stream(10000, 20001, 400, 500).unwrap();
 
     /* debug
     let mut writer = Writer::from_writer(std::io::stdout());
@@ -1094,8 +1094,8 @@ fn reg_test_engine_consistency_with_concurrent_processing() {
     std::io::copy(&mut source, &mut destination).unwrap();
     let mut source = File::open(temp_file3.path()).unwrap();
     let mut destination = File::create("tempfile3.csv").unwrap();
-    std::io::copy(&mut source, &mut destination).unwrap();
-     */
+    std::io::copy(&mut source, &mut destination).unwrap(); */
+
     // Create two engines
     let engine1 = Engine::new();
     let engine2 = Arc::new(Engine::new());
@@ -1153,14 +1153,13 @@ fn reg_test_engine_consistency_with_concurrent_processing() {
         handle.join().unwrap();
     }
 
-    /* debug
+    /*  debug
     writer.write_record(["client", "available", "held", "total", "locked"]).unwrap();
     writer.flush().unwrap();
-    serialize_account_balances_csv(&engine1.accounts, std::io::stdout());
+    let _ = serialize_account_balances_csv(&engine1.accounts, std::io::stdout());
     writer.write_record(["client", "available", "held", "total", "locked"]).unwrap();
     writer.flush().unwrap();
-    serialize_account_balances_csv(&engine2.accounts, std::io::stdout());
-     */
+    let _ = serialize_account_balances_csv(&engine2.accounts, std::io::stdout()); */
 
     // Compare account snapshots
     for account1_entry in engine1.accounts.iter() {
