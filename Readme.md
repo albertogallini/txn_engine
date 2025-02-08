@@ -26,7 +26,7 @@ This project implements a transaction processing system with the following capab
 - **Memory Efficiency**: Processes transactions using stream buffering to manage memory usage even with large datasets.
 - **Concurrency Management**: Internal transaction engine state (`accouts` and `transactions_log`) are implemented using [`DashMap`](https://docs.rs/dashmap/latest/dashmap/struct.DashMap.html) to handle concurrent access efficiently.
 - **Generalization of Disputes**: Disputes are managed on both `Deposit` and `Withdrawal`.
-- **Engine state encoding/decoding**: The `Engine` struct implementing the transaction engine logic is equipped with `load_from_previous_session_csvs`,`dump_account_to_csv` and `dump_transaction_log_to_csvs` functions encode/decode to/from CSV files the internal state (`account` and `transactions_log`).
+- **Engine state serialization/deserialization**: The `Engine` struct implementing the transaction engine logic is equipped with `load_from_previous_session_csvs`,`dump_account_to_csv` and `dump_transaction_log_to_csvs` functions serialize/deserialize to/from CSV files the internal state (`account` and `transactions_log`).
 
 ## Getting Started
 
@@ -312,7 +312,7 @@ NOTE on **locked** account: Once an account is locked, no further actions are po
 
 Implementation: see `fn check_transaction_semantic` and `impl EngineFunctions for Engine` in `./src/engine.rs`
 
-### Engine state encoding/decoding:
+### Engine state serialzization/deserialization:
 The `-dump` command line parameter will cause the `Engine` to dump the entire content of the internal `transaction log` to CSV file (in addition to the accounts on the standard output). The file will be written in the current working directory.
 
 This is useful for debugging and testing since it allows you to save the state of the engine after running a set of transactions and then load it back up for further testing or verification.
@@ -321,7 +321,7 @@ The `accounts` field is a `dashmap::DashMap<ClientId, Account>`.
 The `transactions_log` field is a `dashmap::DashMap<TransactionId, Transaction>`.
 The `serde` module is used to serialize/deserialize the `dashmaps`.
 
-Once  the account dump (returned on the standard output) and the transaction log dump by using the `-dump` command line parameter have been obtained, it is possible to use those files to decode the `Engine` internal status.
+Once  the account dump (returned on the standard output) and the transaction log dump by using the `-dump` command line parameter have been obtained, it is possible to use those files to rebuild (i.e. deserialize) the `Engine` internal status.
 This is possible only through internal APIs (see `load_from_previous_session_csvs` Engine function and `test_serdesr_engine` ) and not currenlty exposed as a command line parameter. 
 This function is useful to easily test some edge cases that are not possible if the internal state of an `Engine` is built by the `read_and_process_transactions` `Engine` function that executes all the semantic checks on the 
 transactions. E.g. see `unit_test_subrtaction_overflow` test case.
