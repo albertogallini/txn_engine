@@ -388,7 +388,7 @@ The `generate_random_transactions` function is used by the `stress-test` mode of
   2000100              2.275930042s         96.062               5.109                       
           
   ```
-  \* on Mac-Book-Air M3 24 Gb.<br>
+  \* on Mac-Book-Air M3 24 Gb in a VSCode terminal Window<br>
   From which we can get the following charts:<br>
   <img src="./img/time_vs_transactions.png" width="500">
   <img src="./img/memory_vs_transactions.png" width="500">
