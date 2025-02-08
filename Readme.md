@@ -354,54 +354,53 @@ Reasons to use serde:
 The `stress_test.sh` script runs the program with increasing numbers of transactions and measures execution time and memory consumption. 
 The `generate_random_transactions` function is used by the `stress-test` mode of the `txn_engine` to generate random transactions in the CSV format. It takes in two parameters: the number of transactions to generate and the output file path.
 
-The `generate_random_transactions` function works as follows:
-- It opens the output file using the provided path.
-- It writes the header line to the file with the column names.
-- For each transaction, it randomly selects a type (deposit, withdrawal, dispute, resolve, chargeback), a client ID between 1 and 1.000.000 and a transaction id between 1 and 10.000.000
-- For deposit and withdrawal transactions, it generates a random amount between 0.0 and 100.000.
-- It writes each transaction line to the file.
+- The `generate_random_transactions` function works as follows:
+  - It opens the output file using the provided path.
+  - It writes the header line to the file with the column names.
+  - For each transaction, it randomly selects a type (deposit, withdrawal, dispute, resolve, chargeback), a client ID between 1 and 1.000.000 and a transaction id between 1 and 10.000.000
+  - For deposit and withdrawal transactions, it generates a random amount between 0.0 and 100.000.
+  - It writes each transaction line to the file.
+- The main in the `stress-test` mode then writes the measure on the standard output in the format `Transactions Count, Time, Process Memory (MB), Engine Memory (MB)`, followed by the accounts dump.
+- The `stress_test.sh` script  loops from 100 to 2.000.100 transactions in steps of 100.000 and capture the measures at each iteration. It returns a table like:
 
-The `stress_test.sh` script  loops from 100 to 2.000.100 transactions in steps of 100.000 and measures the time and memory consumption of the program. 
-The output is written to stress_test_results.txt in the format `Transactions Count, Time, Process Memory (MB), Engine Memory (MB)`.
+  ```
+  Transactions Count   Time                 Process Memory (MB)  Engine Memory (MB)  
+  100                  9.949375ms           0.141                0.001               
+  100100               110.298375ms         9.078                1.252               
+  200100               202.647959ms         18.156               2.504               
+  300100               308.25525ms          17.578               3.752               
+  400100               401.858917ms         24.156               4.782               
+  500100               503.560583ms         38.375               5.471               
+  600100               634.479958ms         38.109               5.790               
+  700100               742.610458ms         46.703               4.517               
+  800100               856.854917ms         43.438               3.636               
+  900100               997.829041ms         44.938               1.699               
+  1000100              1.105896042s         53.766               5.209               
+  1100100              1.202280958s         52.812               4.642               
+  1200100              1.338591125s         76.266               4.479               
+  1300100              1.48892125s          64.578               4.313               
+  1400100              1.610724209s         73.094               5.745               
+  1500100              1.736744167s         83.031               4.453               
+  1600100              1.853796375s         76.062               5.273               
+  1700100              1.9928745s           84.266               6.289               
+  1800100              2.1047665s           76.203               3.718               
+  1900100              2.179973s            91.250               5.059               
+  2000100              2.275930042s         96.062               5.109                       
+          
+  ```
+  \* on Mac-Book-Air M3 24 Gb.<br>
+  From which we can get the following charts:<br>
+  <img src="./img/time_vs_transactions.png" width="500">
+  <img src="./img/memory_vs_transactions.png" width="500">
+  <img src="./img/memory_vs_transactions_ratios.png" width="500">
 
 Note: The `generate_random_transactions` function is not meant to mimic real-world transactions since it generates random transactions without any ordering or dependencies. This results in a <b>higher number of error conditions</b> compared to real-world use cases and as a consequence the number of entry in both the `transaction_log` and `account` maps will be lower than real-world use case. But it is good enough to see how the system resources are used increasing the size of the input, especially to check if there is a trend that is not coeherent with the complexity analysis.
 
-Example of output on Mac-Book M3 24 Gb :
-```
-Transactions Count   Time                 Process Memory (MB)  Engine Memory (MB)  
-100                  9.949375ms           0.141                0.001               
-100100               110.298375ms         9.078                1.252               
-200100               202.647959ms         18.156               2.504               
-300100               308.25525ms          17.578               3.752               
-400100               401.858917ms         24.156               4.782               
-500100               503.560583ms         38.375               5.471               
-600100               634.479958ms         38.109               5.790               
-700100               742.610458ms         46.703               4.517               
-800100               856.854917ms         43.438               3.636               
-900100               997.829041ms         44.938               1.699               
-1000100              1.105896042s         53.766               5.209               
-1100100              1.202280958s         52.812               4.642               
-1200100              1.338591125s         76.266               4.479               
-1300100              1.48892125s          64.578               4.313               
-1400100              1.610724209s         73.094               5.745               
-1500100              1.736744167s         83.031               4.453               
-1600100              1.853796375s         76.062               5.273               
-1700100              1.9928745s           84.266               6.289               
-1800100              2.1047665s           76.203               3.718               
-1900100              2.179973s            91.250               5.059               
-2000100              2.275930042s         96.062               5.109                       
-         
-```
-<img src="./img/time_vs_transactions.png" width="500">
-<img src="./img/memory_vs_transactions.png" width="500">
-<img src="./img/memory_vs_transactions_ratios.png" width="500">
-
-
-So overall performance of txn_engine, on the aforementioned assumption, on this machine is ~`1.000.000 transactions/s` with an average `~[17.000 (Process Memory) - 230.000 (Engine Memory)] transactions/MB` memory impact on the user account/transaction log storage.
+In reference to the above table, the performance of txn_engine, on the aforementioned assumption, on this machine is ~`1.000.000 transactions/s` with an average `~[17.000 (Process Memory) - 230.000 (Engine Memory)] transactions/MB` memory impact on the user account/transaction log storage.
 The plots also show that both time and memory scale as O(n).
 
 ### Notes & Comments
--  The Engine size ( `Engine.size_of`) does not take into account the data structure overhead. Please read the comment of `Engine.size_of` for more detalis.
+-  The Engine size (`Engine.size_of`) does not take into account the data structure overhead. Please read the comment of `Engine.size_of` for more detalis.
 -  As the transactions are generated randomly, the error rate can be quite high, which affects the size of the maps. As the error rate is high the  maps grow slower than a real use case.
 -  The `Process Memory` takes into account the entire process memory footprint, including the Rust runtime, the memory allocation for the I/O and other data structures: this explains the big differences with the `Engine Memory` measures.
 -  The `Process Memory` is controlled by the runtime and the OS, so it is more volatile.
