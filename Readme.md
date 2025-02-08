@@ -158,16 +158,16 @@ The system handles the following error conditions:
 Semantic errors - error conditions on transaction semantic:<br>
 
 - **EngineError::DifferentClient**: If a dispute/resolve/chargeback is attempted on a transaction from a different client.
-- **EngineError::NoAmount**: If a transaction does not have an amount.
+- **EngineError::NoAmount**: If a deposit/withdrawal transaction does not have an amount or referred transaction (e.g. from a dispute) does not have an amount.
 - **EngineError::DepositAmountInvalid**: If the amount of a deposit is not greater than 0.
 - **EngineError::WithdrawalAmountInvalid**: If the amount of a withdrawal is not greater than 0.
 - **EngineError::TransactionRepeated**: If a transaction id already processed in this session - cannot be repeated.
 - **EngineError::InsufficientFunds**: If a client does not have enough available funds for a withdrawal.
-- **EngineError::AccountNotFound**: If an account is not found for a transaction.
-- **EngineError::TransactionNotFound**: If a transaction is not found for a dispute or resolve operation.
+- **EngineError::AccountNotFound**: If an account is not found for a withdrawwal/dispute/resolve/chargeback transaction. Deposit transaction (with valid amount) will create a new account.
+- **EngineError::TransactionNotFound**: If a transaction is not found for a dispute, resolve or chargeback operation.
 - **EngineError::AdditionOverflow**: If an addition operation would result in an overflow.
 - **EngineError::SubtractionOverflow**: If a subtraction operation would result in an overflow.
-- **EngineError::AccountLocked**: If an account is locked.
+- **EngineError::AccountLocked**: If an account is locked any type of transaction return this error.
 - **EngineError::TransactionAlreadyDisputed**: If a dispute is attempted on an already disputed transaction.
 - **EngineError::TransactionNotDisputed**: If a resolve or chargeback is attempted on a non-disputed transaction.<br>
 
