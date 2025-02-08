@@ -114,13 +114,13 @@ This project consists of a set of key components, each responsible for different
   - Main Methods in `Engine` and its implementation of `EngineFunctions` and `EngineStateTransitionFunctions` traits:
     - **`read_and_process_transactions_from_csv`**: Reads transactions from a CSV file and processes them. It calls `read_and_process_transactions`.***Complexity: time `O(n)`, memory space`O(n)`***
     - **`read_and_process_transactions`**: Reads transactions from a input stream and dispatches them for processing by the engine.***Complexity: time `O(n)`, memory space`O(n)`***
-    - **`load_from_previous_session_csvs`**: Loads **n** transactions and **m** accounts  from CSV files dumped from a previous session to populate the internal maps.***Complexity: `O(n+m)`, memory space`O(n+m)`*** 
-    - **`process_transaction`**: Dispatches a transaction to the appropriate processing function based on its type.***Complexity: `O(1)`, memory space`n/a`*** 
-    - **`check_transaction_semantic`**: Verifies the semantic validity of transactions, ensuring they adhere to business rules. ***Complexity: `O(1)`, memory space`n/a`***
+    - **`load_from_previous_session_csvs`**: Loads ***n*** transactions and ***m*** accounts  from CSV files dumped from a previous session to populate the internal maps.***Complexity: `O(n+m)`, memory space`O(n+m)`*** 
+    - **`process_transaction`**: Dispatches a transaction to the appropriate processing function based on its type.***Complexity: `O(1)`, memory space`O(1)`*** 
+    - **`check_transaction_semantic`**: Verifies the semantic validity of transactions, ensuring they adhere to business rules. ***Complexity: `O(1)`, memory space`O(1)`***
     - **`dump_transaction_log_to_csv`**: Dumps the `transaction_log` to a CSV file. ***Complexity: `O(n)`, memory space`O(1)` as uses buffering***
     - **`dump_account_to_csv`**: Outputs the final state of all accounts to a CSV file after processing is complete..***Complexity: time `O(m)`, memory space`O(1)` as uses buffering***
-    - **`safe_add` / `safe_sub`**: Performs arithmetic operations safely, preventing overflow errors. ***Complexity: `O(1)`, memory space`n/a`***
-    - **`size_of`**: Estimates the memory usage of the engine and its data structures.***Complexity: `O(1)`, memory space`n/a`***
+    - **`safe_add` / `safe_sub`**: Performs arithmetic operations safely, preventing overflow errors. ***Complexity: `O(1)`, memory space`O(1)`***
+    - **`size_of`**: Estimates the memory usage of the engine and its data structures.***Complexity: `O(1)`, memory space`O(1)`***
 
   - General Notes about ***Complexity Analysis***:
     - The complexity analysis on the `Engine` is exhaustive to evaluate the `txn_engine` process as it includes all the core functionalities.
