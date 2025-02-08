@@ -16,7 +16,7 @@ const BUFFER_SIZE: usize = 16_384;
 fn unit_test_deposit_and_withdrawal() {
     let mut temp_file = NamedTempFile::new().unwrap();
     let csv_content = r#"type,client,tx,amount,\n
-                                deposit,1, 1, 10.0000,\n
+                                deposit,1, 1, 10.00008,\n
                                 withdrawal, 1, 2, 5.0000,\n"#;
 
     write!(temp_file, "{}", csv_content).unwrap();
@@ -32,12 +32,12 @@ fn unit_test_deposit_and_withdrawal() {
     let account = engine.accounts.get(&1).expect("Account 1 should exist");
     assert_eq!(
         account.total,
-        Decimal::from_str("5.0000").unwrap(),
+        Decimal::from_str("5.0001").unwrap(),
         "Total should be 5 after deposit and withdrawal"
     );
     assert_eq!(
         account.available,
-        Decimal::from_str("5.0000").unwrap(),
+        Decimal::from_str("5.0001").unwrap(),
         "Available should match total since no disputes"
     );
     assert_eq!(
@@ -689,7 +689,7 @@ fn reg_test_from_csv_file_basic() {
     let account1 = engine.accounts.get(&1).expect("Account 1 should exist");
     assert_eq!(
         account1.total,
-        Decimal::from_str("10").unwrap(),
+        Decimal::from_str("10.0001").unwrap(),
         "Account 1 total should be 10"
     );
     assert_eq!(
