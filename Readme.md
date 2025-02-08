@@ -324,10 +324,10 @@ The `serde` module is used to serialize/deserialize the `dashmaps`.
 Once  the account dump (returned on the standard output) and the transaction log dump by using the `-dump` command line parameter have been obtained, it is possible to use those files to rebuild (i.e. deserialize) the `Engine` internal status.
 This is possible only through internal APIs (see `load_from_previous_session_csvs` Engine function and `test_serdesr_engine` ) and not currenlty exposed as a command line parameter. 
 This function is useful to easily test some edge cases that are not possible if the internal state of an `Engine` is built by the `read_and_process_transactions` `Engine` function that executes all the semantic checks on the 
-transactions. E.g. see `unit_test_subrtaction_overflow` test case.
+transactions. E.g. see `unit_test_subrtaction_overflow` test case.<br>
 `load_from_previous_session_csvs` is much faster than `read_and_process_transactions` as there is no semantic check. It is a *blind* decoding of the internal Engine maps dump. For this reason, it 
 is a potentially dangerous functionality and if used in production (e.g.: to quickly restore an instance of the service ***without reading the entire transaction history since inception***), it must be guaranteed 
-the input files have not been modified after being created by the process. 
+the input files have not been modified after being created by the process.<br>
 Furthermore, to use such a functionality in a production environment, the dumped files should be equipped with metadata about the creation time and encoder versioning and logic (to handle the ser/deser backward compatibility with further txn_engine releases).
 A possible scenario to use this functionality is to store every day - at the end of the day - the snapshot of accounts and transactions log. So if the next day a txn_engine has to be restarted it can load from the yesterday snapshot and then reconstruct the 
 correct current status loading just the transactions of the current day. Which is computationally sustainable: see performance analysis in the next section.
