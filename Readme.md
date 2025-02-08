@@ -24,7 +24,7 @@ This project implements a transaction processing system with the following capab
   - Comprehensive error checks throughout transaction processing.
   - I/O & Ser/DeSer error handling. 
 - **Memory Efficiency**: Processes transactions using stream buffering to manage memory usage even with large datasets.
-- **Concurrency Management**: Internal transaction engine state (`accouts` and `transactions_log`) are implemented using [`DashMap`](https://docs.rs/dashmap/latest/dashmap/struct.DashMap.html) to handle (potential) concurrent access efficiently
+- **Concurrency Management**: Internal transaction engine state (`accouts` and `transactions_log`) are implemented using [`DashMap`](https://docs.rs/dashmap/latest/dashmap/struct.DashMap.html) to handle concurrent access efficiently.
 - **Generalization of Disputes**: Disputes are managed on both `Deposit` and `Withdrawal`.
 - **Engine state encoding/decoding**: The `Engine` struct implementing the transaction engine logic is equipped with `load_from_previous_session_csvs`,`dump_account_to_csv` and `dump_transaction_log_to_csvs` functions encode/decode to/from CSV files the internal state (`account` and `transactions_log`).
 
@@ -68,7 +68,13 @@ Running Tests
 cargo test
 ```
 
-For stress testing suite to measure time and memory conumption (run `cargo build --release` first):
+For stress testing suite to measure time and memory conumption:
+- build the release binary 
+
+```
+cargo build --release
+```
+- then run 
 
 ```sh
 ./stress-test.sh
@@ -77,10 +83,10 @@ For stress testing suite to measure time and memory conumption (run `cargo build
 ## Implementation Description & Assumptions 
 
 The transaction engine processes transactions from CSV input including deposits, withdrawals, disputes, resolutions, and chargebacks. 
-It manages client accounts with available, held, and total balances while supporting batch processing for large datasets to ensure memory efficiency. 
-Safe arithmetic operations prevent overflow errors, and it handles disputes for both deposits and withdrawals, with negative holding for the latter
+It manages client accounts with available, held, and total balances. 
+Safe arithmetic operations prevent overflow errors, and it handles disputes for both deposits and withdrawals.
 Accounts are locked upon chargeback, and the system provides detailed error reporting. It also includes stress testing capabilities by generating random 
-transactions for performance analysis, outputs account statuses to CSV, and leverages Rust's ownership for secure memory management.
+transactions for performance analysis, outputs account statuses to CSV, and leverages Rust's ownership and DashMap for safe memory management and resource sharing.
 
 ### Project Structure
 
@@ -321,14 +327,16 @@ Once  the account dump (returned on the standard output) and the transaction log
 This is possible only through internal APIs (see `load_from_previous_session_csvs` Engine function and `test_serdesr_engine` ) and not currenlty exposed as a command line parameter. 
 This function is useful to easily test some edge cases that are not possible if the internal state of an `Engine` is built by the `read_and_process_transactions` `Engine` function that executes all the semantic checks on the 
 transactions. E.g. see `unit_test_subrtaction_overflow` test case.
-`load_from_previous_session_csvs` is much faster than `read_and_process_transactions` as there is no semantic check. It is a blind decoding of the internal Engine maps dump. For this reason, it 
+`load_from_previous_session_csvs` is much faster than `read_and_process_transactions` as there is no semantic check. It is a *blind* decoding of the internal Engine maps dump. For this reason, it 
 is a potentially dangerous functionality and if used in production (e.g.: to quickly restore an instance of the service ***without reading the entire transaction history since inception***), it must be guaranteed 
 the input files have not been modified after being created by the process. 
 Furthermore, to use such a functionality in a production environment, the dumped files should be equipped with metadata about the creation time and encoder versioning and logic (to handle the ser/deser backward compatibility with further txn_engine releases).
 A possible scenario to use this functionality is to store every day - at the end of the day - the snapshot of accounts and transactions log. So if the next day a txn_engine has to be restarted it can load from the yesterday snapshot and then reconstruct the 
 correct current status loading just the transactions of the current day. Which is computationally sustainable: see performance analysis in the next section.
 
-- Reasons to use serde:
+`load_from_previous_session_csvs` uses default BufReader buffering size.  
+
+Reasons to use serde:
   - CSV to Struct: when reading from CSV, you might want to directly convert each row into a `Transaction` or `Account` struct.
   Serde can automatically map CSV fields to struct fields if you use the #[derive(Deserialize)] attribute on your structs.
 
