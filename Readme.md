@@ -45,7 +45,7 @@ cargo build
 or, for optimized binary:
 
 ```
-cargo build -- release
+cargo build --release
 ```
 
 ### Usage
