@@ -364,27 +364,27 @@ The `generate_random_transactions` function is used by the `stress-test` mode of
 
   ```
   Transactions Count   Time                 Process Memory (MB)  Engine Memory (MB)  
-  100                  9.949375ms           0.141                0.001               
-  100100               110.298375ms         9.078                1.252               
-  200100               202.647959ms         18.156               2.504               
-  300100               308.25525ms          17.578               3.752               
-  400100               401.858917ms         24.156               4.782               
-  500100               503.560583ms         38.375               5.471               
-  600100               634.479958ms         38.109               5.790               
-  700100               742.610458ms         46.703               4.517               
-  800100               856.854917ms         43.438               3.636               
-  900100               997.829041ms         44.938               1.699               
-  1000100              1.105896042s         53.766               5.209               
-  1100100              1.202280958s         52.812               4.642               
-  1200100              1.338591125s         76.266               4.479               
-  1300100              1.48892125s          64.578               4.313               
-  1400100              1.610724209s         73.094               5.745               
-  1500100              1.736744167s         83.031               4.453               
-  1600100              1.853796375s         76.062               5.273               
-  1700100              1.9928745s           84.266               6.289               
-  1800100              2.1047665s           76.203               3.718               
-  1900100              2.179973s            91.250               5.059               
-  2000100              2.275930042s         96.062               5.109                       
+  100                  12.87825ms           0.391                0.001               
+  100100               79.222833ms          11.719               1.258               
+  200100               145.160667ms         11.656               2.509               
+  300100               212.871209ms         17.938               3.452               
+  400100               285.000875ms         32.422               4.999               
+  500100               385.176666ms         28.891               1.813               
+  600100               456.288333ms         29.328               4.168               
+  700100               526.671791ms         40.297               5.125               
+  800100               645.112125ms         43.281               5.254               
+  900100               743.275667ms         50.375               4.533               
+  1000100              798.600791ms         52.625               5.826               
+  1100100              864.674375ms         51.656               4.940               
+  1200100              956.779917ms         55.047               5.343               
+  1300100              1.024538625s         74.219               5.261               
+  1400100              1.181045458s         70.375               6.182               
+  1500100              1.227557875s         78.234               4.434               
+  1600100              1.310450292s         91.406               8.635               
+  1700100              1.3783415s           82.422               6.778               
+  1800100              1.469251375s         82.172               4.515               
+  1900100              1.677349042s         84.812               7.616               
+  2000100              1.705031125s         86.844               6.066                       
           
   ```
   ***[on Mac-Book-Air M3 24 Gb in a VSCode terminal window]***<br><br>
@@ -394,8 +394,9 @@ The `generate_random_transactions` function is used by the `stress-test` mode of
   <img src="./img/memory_vs_transactions_ratios.png" width="500">
 
 Note: The `generate_random_transactions` function is not meant to mimic real-world transactions since it generates random transactions without any ordering or dependencies. This results in a <b>higher number of error conditions</b> compared to real-world use cases and as a consequence the number of entry in both the `transaction_log` and `account` maps will be lower than real world use case. But it is good enough to see how the system resources are used increasing the size of the input, especially to check if there is a trend that is not coeherent with the complexity analysis. `generate_random_transaction_concurrent_stream` would provide a transactions stream closer to the real world use case, but has it has an internal state that would affect the process memory footprint.
+The best approach would be to generate the transactions offline and process them with `txn_engine`, but we kept the transaction generation in-process for simplicity.
 
-In reference to the above table, the performance of txn_engine, on the aforementioned assumption, on this machine is ~`1.000.000 transactions/s` with an average `~[17.000 (Process Memory) - 230.000 (Engine Memory)] transactions/MB` memory impact on the user account/transaction log storage.
+In reference to the above table, the performance of txn_engine, on the aforementioned assumption, on this machine is ~`1.200.000 transactions/s` with an average `~[17.000 (Process Memory) - 200.000 (Engine Memory)] transactions/MB` memory impact on the user account/transaction log storage.
 The plots also show that both time and memory scale as O(n).
 
 ### Notes & Comments
@@ -423,6 +424,7 @@ The plots also show that both time and memory scale as O(n).
   - 200 x 30 days  = 6.000 transactions per client per period have to be stored
   - 1B / 6.000 =  166.666 = ~166.000 (for simplicity) clients per machine.
   - We can add a node increasing throughput and without sacrificing latency, e.g.: a farm with 100 64Gb nodes can manage 16.6 M clients.
+  - NOTE: `pub type ClientId = u16` should be moved to `u32` or `u64` as `u16` can only represent 65536 clients.
 
 - The solution scales vertically as follows
   - increase the node memory will allow to manage more clients per node. e.g.: 256 Gb memory will allow to manage 16.6 x 4 =~ 66 M clients (which is in line with the # of customers of biggest retail banks on earth)

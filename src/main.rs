@@ -98,15 +98,15 @@ fn process_normal(
 /// - The temporary file is automatically deleted when the function returns.
 /// - The performance metrics are printed to stderr.
 fn process_stress_test(num_transactions: usize) -> Result<(), Box<dyn std::error::Error>> {
-    let mut engine = Engine::default();
-    let start_time = Instant::now();
-    let mut system = System::new_all();
-    let start_memory = get_current_memory(&mut system);
-
     // Use NamedTempFile for automatic cleanup
     // The temporary file is automatically deleted when temp_file goes out of scope
     let temp_file = NamedTempFile::new()?;
     generate_random_transactions(num_transactions, &temp_file)?;
+
+    let mut engine = Engine::default();
+    let start_time = Instant::now();
+    let mut system = System::new_all();
+    let start_memory = get_current_memory(&mut system);
 
     // Process transactions directly from the temporary file
     // Error are not printed on the stderr during the stress test as it may affect the performance of the engine
