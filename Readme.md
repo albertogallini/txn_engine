@@ -82,11 +82,10 @@ cargo build --release
 
 ## Implementation Description & Assumptions 
 
-The transaction engine processes transactions from CSV input including deposits, withdrawals, disputes, resolutions, and chargebacks. 
-It manages client accounts with available, held, and total balances. 
-Safe arithmetic operations prevent overflow errors, and it handles disputes for both deposits and withdrawals.
-Accounts are locked upon chargeback, and the system provides detailed error reporting. It also includes stress testing capabilities by generating random 
-transactions for performance analysis, outputs account statuses to CSV.
+The transaction engine processes transactions from CSV input including deposits, withdrawals, disputes, resolutions, and chargebacks and outputs account statuses to CSV.
+It manages client accounts with available, held, and total balances. Accounts are locked upon chargeback transactions.
+Safe arithmetic operations prevent overflow errors, and it handles disputes for both deposits and withdrawals. Futhermore the system provides detailed error reporting.
+It also includes stress testing capabilities by generating random transactions for performance analysis.
 
 ### Project Structure
 
@@ -112,19 +111,19 @@ This project consists of a set of key components, each responsible for different
 
 - **`engine.rs`**
   - Main Methods in `Engine` and its implementation of `EngineFunctions` and `EngineStateTransitionFunctions` traits:
-    - **`read_and_process_transactions_from_csv`**: Reads transactions from a CSV file and processes them. It calls `read_and_process_transactions`.***Complexity: time `O(n)`, memory space`O(n)`***
-    - **`read_and_process_transactions`**: Reads transactions from a input stream and dispatches them for processing by the engine.***Complexity: time `O(n)`, memory space`O(n)`***
-    - **`load_from_previous_session_csvs`**: Loads ***n*** transactions and ***m*** accounts  from CSV files dumped from a previous session to populate the internal maps.***Complexity: `O(n+m)`, memory space`O(n+m)`*** 
-    - **`process_transaction`**: Dispatches a transaction to the appropriate processing function based on its type.***Complexity: `O(1)`, memory space`O(1)`*** 
+    - **`read_and_process_transactions_from_csv`**: Reads transactions from a CSV file and processes them. It calls `read_and_process_transactions`. ***Complexity: time `O(n)`, memory space`O(n)`***
+    - **`read_and_process_transactions`**: Reads transactions from a input stream and dispatches them for processing by the engine. ***Complexity: time `O(n)`, memory space`O(n)`***
+    - **`load_from_previous_session_csvs`**: Loads ***n*** transactions and ***m*** accounts  from CSV files dumped from a previous session to populate the internal maps. ***Complexity: `O(n+m)`, memory space`O(n+m)`*** 
+    - **`process_transaction`**: Dispatches a transaction to the appropriate processing function based on its type. ***Complexity: `O(1)`, memory space`O(1)`*** 
     - **`check_transaction_semantic`**: Verifies the semantic validity of transactions, ensuring they adhere to business rules. ***Complexity: `O(1)`, memory space`O(1)`***
     - **`dump_transaction_log_to_csv`**: Dumps the `transaction_log` to a CSV file. ***Complexity: `O(n)`, memory space`O(1)` as uses buffering***
-    - **`dump_account_to_csv`**: Outputs the final state of all accounts to a CSV file after processing is complete..***Complexity: time `O(m)`, memory space`O(1)` as uses buffering***
+    - **`dump_account_to_csv`**: Outputs the final state of all accounts to a CSV file after processing is complete. ***Complexity: time `O(m)`, memory space`O(1)` as uses buffering***
     - **`safe_add` / `safe_sub`**: Performs arithmetic operations safely, preventing overflow errors. ***Complexity: `O(1)`, memory space`O(1)`***
-    - **`size_of`**: Estimates the memory usage of the engine and its data structures.***Complexity: `O(1)`, memory space`O(1)`***
+    - **`size_of`**: Estimates the memory usage of the engine and its data structures. ***Complexity: `O(1)`, memory space`O(1)`***
 
   - General Notes about ***Complexity Analysis***:
     - The complexity analysis on the `Engine` is exhaustive to evaluate the `txn_engine` process as it includes all the core functionalities.
-    - The Engine internal state is handled by two DashMaps `accounts` and `transaction_log`. When considering DashMap, operations like insertion, lookup, and removal are generally O(1) in terms of time complexity. However, under heavy contention or in worst-case scenarios, performance can degrade due to the locking mechanism. See *Concurrency Management* section.
+    - The Engine internal state is handled by two DashMaps `accounts` and `transaction_log`. When considering DashMap, operations like insertion, lookup, and removal are generally O(1) in terms of time complexity. However, under heavy contention or in worst-case scenarios, performance might degrade due to the locking mechanism. See *Concurrency Management* section.
     - CSV Operations: File I/O operations can introduce variability due to disk I/O, but from an algorithmic standpoint, reading or writing each record is considered O(1) per operation.
 
 #### `EngineFunctions` and `EngineStateTransitionFunctions` traits:
@@ -178,7 +177,7 @@ I/O Error occurring during sereliazion/deserialization<br>
 - **EngineSerDeserError::InvalidDecimal**: Parsing error while reading a previous session csv -> InvalidDecimal
 - **EngineSerDeserError::InvalidDecimal**: Parsing error while reading a previous session csv -> InvalidBool
 
-when the `txn_engine` is excetued the errors are reported on the stderr in a way it is clear to understand which is the trasaction causing the issue. E.g.:
+when the `txn_engine` is executed the errors are reported on the ***stderr*** in a way it is clear to understand which is the trasaction causing the issue. E.g.:
 ```
 $ txn_engine % cargo run -- tests/transactions_errors.csv -dump > output.csv
   
@@ -223,7 +222,7 @@ NOTES:
  to process a generic input stream (`std::io::Read`) efficienlty by leveraging on buffering to avoid high memory consumption.
  
  -  To have consistent results processing concurrently multiple transactions streams, the streams:
-    - must have disjoint client id ranges. This is also related to scalabilty, see also the notes about sharding in ***Stress Test script & performance measure*** section.
+    - must have disjoint client id ranges. This is also related to scalabilty, see also the notes about *sharding* in ***Stress Test script & performance measure*** section.
     - must have disjoint transaction id ranges.
 
     Conversely, a transaction of stream A may affect the account of a client on stream B, and - as the concurrent execution cannot guarantee the order of the transaction processing - this 
@@ -300,7 +299,7 @@ NOTES:
   - For a Disputed Withdrawal:
     - Available: Increases by the disputed amount (since you're essentially holding back the withdrawal).
     - Held: Decreases by the disputed amount (negative held).
-    - Total: Remains unchanged because you're just moving what was taken out back into a different category (held).
+    - Total: Remains unchanged.
 
   - Allowing for negative held funds for withdrawals means that if the dispute results in a resolve, you'd increase the held (which is negative) and decrease available. For a chargeback, you'd reduce the total by the (negative) held amount, which means adding the disputed withdrawal back to the account and then the account is locked (according to the chargeback logic).
 
@@ -308,11 +307,11 @@ NOTES:
 - It is not possible to dispute multiple times the same transaction. This is prevented by the `disputed` flag in the `Transaction` struct.
 - It is not possible to resolve a non-disputed transaction. Again, this is prevented by the `disputed` flag in the `Transaction` struct.
 
-NOTE on **locked** account: Once an account is locked, no further actions are possible. Neither the `Engine` nor `EngineFunctions` expose APIs to unlock the account. The only possible way to unlock it is through offline methods (i.e., manual intervention) on the account storage, followed by loading the `txn_engine` from a previously generated and modified dump (see the next section).
+NOTE on **locked** account: Once an account is locked, no further actions are possible. Neither the `Engine` nor `EngineFunctions` expose APIs to unlock the account. The only possible way to unlock it is through offline methods (i.e.: manual intervention) on the account storage, followed by loading the `txn_engine` from a previously generated and modified dump (see the next section).
 
 Implementation: see `fn check_transaction_semantic` and `impl EngineFunctions for Engine` in `./src/engine.rs`
 
-### Engine state serialzization/deserialization:
+### Engine state serialization/deserialization:
 The `-dump` command line parameter will cause the `Engine` to dump the entire content of the internal `transaction log` to CSV file (in addition to the accounts on the standard output). The file will be written in the current working directory.
 
 This is useful for debugging and testing since it allows you to save the state of the engine after running a set of transactions and then load it back up for further testing or verification.
@@ -327,7 +326,7 @@ This function is useful to easily test some edge cases that are not possible if 
 transactions. E.g. see `unit_test_subrtaction_overflow` test case.<br>
 `load_from_previous_session_csvs` is much faster than `read_and_process_transactions` as there is no semantic check. It is a *blind* decoding of the internal Engine maps dump. For this reason, it 
 is a potentially dangerous functionality and if used in production (e.g.: to quickly restore an instance of the service ***without reading the entire transaction history since inception***), it must be guaranteed 
-the input files have not been modified after being created by the process (e.g. using hashing functions)<br>
+the input files have not been modified after being created by the process (e.g. using hashing)<br>
 Furthermore, to use such a functionality in a production environment, the dumped files should be equipped with metadata about the creation time and encoder versioning and logic (to handle the ser/deser backward compatibility with further txn_engine releases).<br>
 A possible scenario to use this functionality is to store every day - at the end of the day - the snapshot of accounts and transactions log. So if the next day a txn_engine has to be restarted it can load from the yesterday snapshot and then reconstruct the 
 correct current status loading just the transactions of the current day. Which is computationally sustainable: see performance analysis in the next section.
