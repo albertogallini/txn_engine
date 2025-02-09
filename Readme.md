@@ -40,7 +40,12 @@ This project implements a transaction processing system with the following capab
 ```sh
 git clone https://github.com/albertogallini/txn_engine.git
 cd txn-engine
-cargo build --release
+cargo build
+```
+or, for optimized binary:
+
+```
+cargo build -- release
 ```
 
 ### Usage
