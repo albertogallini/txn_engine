@@ -1,5 +1,8 @@
 #!/bin/bash
 
+# Build the release version of the program
+cargo build --release
+
 # Output file for storing results
 output_file="stress_test_results.txt"
 
@@ -27,7 +30,6 @@ for i in $(seq 100 100000 2000100); do
     time=$(echo "$output" | grep "Elapsed time" | awk '{print $3, $4}')
 
     
-    
     # Check if the output contains valid results
     if [[ -n "$memory" && -n "$time" && -n "$engine_memory" ]]; then
         # Append results to the output file
@@ -36,8 +38,6 @@ for i in $(seq 100 100000 2000100); do
         echo "Failed to capture results for $formatted_i transactions."
     fi
 done
-
-# Print the series from the output file
 
 # Print the series from the output file with aligned columns
 awk 'BEGIN { 

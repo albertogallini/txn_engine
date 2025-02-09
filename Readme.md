@@ -45,7 +45,10 @@ cargo build --release
 
 ### Usage
 To process a transactions csv file:
-
+```sh
+cargo run  -- transactions.csv > accounts.csv
+```
+or, for optimized binary:
 ```sh
 cargo run --release -- transactions.csv > accounts.csv
 ```
@@ -53,10 +56,10 @@ cargo run --release -- transactions.csv > accounts.csv
 To process a transactions csv file and dump the engine transaction_log:
 
 ```sh
-cargo run --release -- transactions.csv -dump > accounts.csv
+cargo run -- transactions.csv -dump > accounts.csv
 ```
 
-For stress testing with internally generated transactions:
+For stress testing with internally generated transactions (`release` mode is more appropriate here):
 
 ```sh
 cargo run --release -- stress-test 10000 > accounts.csv
@@ -69,12 +72,6 @@ cargo test
 ```
 
 For stress testing suite to measure time and memory conumption:
-- build the release binary 
-
-```
-cargo build --release
-```
-- then run 
 
 ```sh
 ./stress-test.sh
