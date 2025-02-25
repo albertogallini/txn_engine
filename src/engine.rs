@@ -121,6 +121,33 @@ impl Engine {
         }
     }
 
+
+    /// Attempts to retrieve a mutable reference to an account associated with a given client ID.
+    ///
+    /// # Parameters
+    /// - `client`: The client ID whose account is to be retrieved.
+    ///
+    /// # Returns
+    /// - `Ok(RefMut<Account>)`: A mutable reference to the account if it exists and is not locked.
+    /// - `Err(EngineError)`: If the account is not found or is locked.
+    ///
+    /// # Errors
+    /// - `AccountNotFound`: If the account associated with the given client ID does not exist.
+    /// - `AccountLocked`: If the account is locked.
+
+    fn try_get_account(&self, client: ClientId) -> Result<dashmap::mapref::one::RefMut<'_, u16, Account, >, EngineError>{
+        self.accounts
+            .get_mut(&client)
+            .ok_or(EngineError::AccountNotFound)
+            .and_then(|account| {
+                if account.locked {
+                    Err(EngineError::AccountLocked)
+                } else {
+                    Ok(account)
+                }
+            })
+    }
+
     /// Verifies the semantic validity of a transaction in relation to its original transaction.
     ///
     /// # Parameters
@@ -254,37 +281,27 @@ impl EngineFunctions for Engine {
 
         let mut csv_reader = ReaderBuilder::new().has_headers(true).from_reader(reader);
 
-        let mut errors = Vec::new();
-
+        let mut errors = Vec::with_capacity(1000);
         loop {
-            let mut records = Vec::new();
-            for _ in 0..buffer_size {
-                match csv_reader.deserialize::<Transaction>().next() {
-                    Some(Ok(record)) => records.push(record),
-                    Some(Err(e)) => {
-                        let error_message = e.to_string();
-                        if let Some(pos) = error_message.find("Unknown transaction type") {
-                            errors.push(format!(
-                                "Error reading transaction record: {}",
-                                &error_message[pos..]
-                            ));
-                        } else {
-                            errors.push(format!("Error reading transaction record: {}", e));
-                        }
-                        continue;
+            match csv_reader.deserialize::<Transaction>().next() {
+                Some(Ok(record)) => {
+                    if let Err(e) = self.process_transaction(&record) {
+                        errors.push(format!("Error processing {:?}: {}", record, e));
                     }
-                    None => break,
                 }
-            }
-
-            if records.is_empty() {
-                break;
-            }
-
-            for transaction in records {
-                if let Err(e) = self.process_transaction(&transaction) {
-                    errors.push(format!("Error processing {:?}: {}", transaction, e));
+                Some(Err(e)) => {
+                    let error_message = e.to_string();
+                    if let Some(pos) = error_message.find("Unknown transaction type") {
+                        errors.push(format!(
+                            "Error reading transaction record: {}",
+                            &error_message[pos..]
+                        ));
+                    } else {
+                        errors.push(format!("Error reading transaction record: {}", e));
+                    }
+                    continue;
                 }
+                None => break,
             }
         }
 
@@ -293,6 +310,7 @@ impl EngineFunctions for Engine {
         } else {
             Ok(())
         }
+
     }
 
     /// Reads transactions from a CSV file and processes them using the Engine.
@@ -462,6 +480,7 @@ impl EngineFunctions for Engine {
 
         Ok(())
     }
+
 }
 
 impl EngineStateTransitionFunctions for Engine {
@@ -514,6 +533,9 @@ impl EngineStateTransitionFunctions for Engine {
         Ok(())
     }
 
+
+    
+
     /// Process a withdrawal transaction.
     ///
     /// # Parameters
@@ -538,20 +560,16 @@ impl EngineStateTransitionFunctions for Engine {
         if self.transaction_log.contains_key(&tx.tx) {
             return Err(EngineError::TransactionRepeated);
         }
-        if let Some(mut account) = self.accounts.get_mut(&tx.client) {
-            if account.locked {
-                return Err(EngineError::AccountLocked);
-            }
-            if account.available >= amount {
-                account.available = Engine::safe_sub(&account.available, &amount)?;
-                account.total = Engine::safe_sub(&account.total, &amount)?;
-            } else {
-                return Err(EngineError::InsufficientFunds);
-            }
-        } else {
-            return Err(EngineError::AccountNotFound);
-        }
+       
+       let mut account = self.try_get_account(tx.client)?;
 
+        if account.available >= amount {
+            account.available = Engine::safe_sub(&account.available, &amount)?;
+            account.total = Engine::safe_sub(&account.total, &amount)?;
+        } else {
+            return Err(EngineError::InsufficientFunds);
+        }
+           
         self.transaction_log.insert(tx.tx, tx.clone());
         Ok(())
     }
@@ -570,20 +588,14 @@ impl EngineStateTransitionFunctions for Engine {
     /// - `AccountNotFound`: If the client id is not found in the accounts map.
     /// - `AccountLocked`: If the account is already locked.
     fn process_dispute(&self, tx: &Transaction) -> Result<(), EngineError> {
-        if let Some(mut account) = self.accounts.get_mut(&tx.client) {
-            if account.locked {
-                return Err(EngineError::AccountLocked);
-            }
-            if let Some(mut original_tx) = self.transaction_log.get_mut(&tx.tx) {
-                let amount = Engine::check_transaction_semantic(tx, &original_tx)?;
-                account.available = Engine::safe_sub(&account.available, &amount)?;
-                account.held = Engine::safe_add(&account.held, &amount)?;
-                original_tx.disputed = true;
-            } else {
-                return Err(EngineError::TransactionNotFound);
-            }
+        let mut account = self.try_get_account(tx.client)?;
+        if let Some(mut original_tx) = self.transaction_log.get_mut(&tx.tx) {
+            let amount = Engine::check_transaction_semantic(tx, &original_tx)?;
+            account.available = Engine::safe_sub(&account.available, &amount)?;
+            account.held = Engine::safe_add(&account.held, &amount)?;
+            original_tx.disputed = true;
         } else {
-            return Err(EngineError::AccountNotFound);
+            return Err(EngineError::TransactionNotFound);
         }
         Ok(())
     }
@@ -602,20 +614,14 @@ impl EngineStateTransitionFunctions for Engine {
     /// - `AccountNotFound`: If the client id is not found in the accounts map.
     /// - `AccountLocked`: If the account is already locked.
     fn process_resolve(&self, tx: &Transaction) -> Result<(), EngineError> {
-        if let Some(mut account) = self.accounts.get_mut(&tx.client) {
-            if account.locked {
-                return Err(EngineError::AccountLocked);
-            }
-            if let Some(mut original_tx) = self.transaction_log.get_mut(&tx.tx) {
-                let amount = Engine::check_transaction_semantic(tx, &original_tx)?;
-                account.available = Engine::safe_add(&account.available, &amount)?;
-                account.held = Engine::safe_sub(&account.held, &amount)?;
-                original_tx.disputed = false;
-            } else {
-                return Err(EngineError::TransactionNotFound);
-            }
+        let mut account = self.try_get_account(tx.client)?;
+        if let Some(mut original_tx) = self.transaction_log.get_mut(&tx.tx) {
+            let amount = Engine::check_transaction_semantic(tx, &original_tx)?;
+            account.available = Engine::safe_add(&account.available, &amount)?;
+            account.held = Engine::safe_sub(&account.held, &amount)?;
+            original_tx.disputed = false;
         } else {
-            return Err(EngineError::AccountNotFound);
+            return Err(EngineError::TransactionNotFound);
         }
         Ok(())
     }
@@ -634,22 +640,15 @@ impl EngineStateTransitionFunctions for Engine {
     /// - `AccountNotFound`: If the client id is not found in the accounts map.
     /// - `AccountLocked`: If the account is already locked.
     fn process_chargeback(&self, tx: &Transaction) -> Result<(), EngineError> {
-        if let Some(mut account) = self.accounts.get_mut(&tx.client) {
-            if account.locked {
-                return Err(EngineError::AccountLocked);
-            }
-            if let Some(original_tx) = self.transaction_log.get(&tx.tx) {
-                let amount = Engine::check_transaction_semantic(tx, &original_tx)?;
-                account.total = Engine::safe_sub(&account.total, &amount)?;
-                account.held = Engine::safe_sub(&account.held, &amount)?;
-                account.locked = true;
-            } else {
-                return Err(EngineError::TransactionNotFound);
-            }
+        let mut account = self.try_get_account(tx.client)?;
+        if let Some(original_tx) = self.transaction_log.get(&tx.tx) {
+            let amount = Engine::check_transaction_semantic(tx, &original_tx)?;
+            account.total = Engine::safe_sub(&account.total, &amount)?;
+            account.held = Engine::safe_sub(&account.held, &amount)?;
+            account.locked = true;
         } else {
-            return Err(EngineError::AccountNotFound);
+            return Err(EngineError::TransactionNotFound);
         }
-
         Ok(())
     }
 }
