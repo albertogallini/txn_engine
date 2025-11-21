@@ -1,3 +1,4 @@
+use crate::basics::hmap::ShardedRwLockMap;
 use csv::Writer;
 use dashmap::DashMap;
 use rust_decimal::Decimal;
@@ -54,5 +55,65 @@ pub fn serialize_account_balances_csv<W: Write>(
         ))?;
     }
     csv_writer.flush()?;
+    Ok(())
+}
+
+use csv::WriterBuilder;
+use tokio::io::{AsyncWrite, AsyncWriteExt};
+
+/// Writes the final state of all accounts to the given writer as a CSV file.
+///
+/// This function is used at the end of the `txn_engine` to output the final state of all accounts to a writer.
+/// The order of the columns is:
+/// - client: The client ID.
+/// - available: The available balance for the client.
+/// - held: The held balance for the client.
+/// - total: The total balance for the client.
+/// - locked: Whether the account is locked.
+///
+/// # Errors
+/// - `Box<dyn std::error::Error + Send + Sync>` if any errors occur while writing to the writer.
+pub async fn serialize_account_balances_csv_async<W>(
+    accounts: &ShardedRwLockMap<ClientId, Account>,
+    mut writer: W,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>>
+where
+    W: AsyncWrite + Unpin + Send + Sync,
+{
+    // Use csv::Writer with a Vec<u8> buffer first (fastest path)
+    let mut buffer = Vec::with_capacity(8192);
+    {
+        let mut csv_writer = WriterBuilder::new()
+            .has_headers(false)
+            .from_writer(&mut buffer);
+
+        let mut iter = accounts.iter().await;
+        while let Some((client_id, shard_guard)) = iter.next().await {
+            // Safety: we know key exists in this shard
+            if let Some(account) = shard_guard.get(&client_id) {
+                csv_writer.serialize((
+                    client_id,
+                    account.available,
+                    account.held,
+                    account.total,
+                    account.locked,
+                ))?;
+
+                //flush every N records to reduce memory
+                if client_id % 1000 == 0 {
+                    csv_writer.flush()?;
+                    writer.flush().await?;
+                }
+            }
+        }
+    }
+
+    // Write header + all buffered data in one go
+    writer
+        .write_all(b"client,available,held,total,locked\n")
+        .await?;
+    writer.write_all(&buffer).await?;
+    writer.flush().await?;
+
     Ok(())
 }

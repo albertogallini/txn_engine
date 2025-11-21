@@ -1,5 +1,3 @@
-// sharded_tokio.rs
-
 use std::collections::HashMap;
 use std::hash::Hash;
 use std::num::Wrapping;

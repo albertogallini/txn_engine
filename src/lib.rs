@@ -1,3 +1,4 @@
+pub mod asyncengine;
 pub mod basics;
 pub mod datastr;
 pub mod engine;
