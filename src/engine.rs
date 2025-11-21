@@ -121,7 +121,6 @@ impl Engine {
         }
     }
 
-
     /// Attempts to retrieve a mutable reference to an account associated with a given client ID.
     ///
     /// # Parameters
@@ -134,8 +133,10 @@ impl Engine {
     /// # Errors
     /// - `AccountNotFound`: If the account associated with the given client ID does not exist.
     /// - `AccountLocked`: If the account is locked.
-
-    fn try_get_account(&self, client: ClientId) -> Result<dashmap::mapref::one::RefMut<'_, u16, Account, >, EngineError>{
+    fn try_get_account(
+        &self,
+        client: ClientId,
+    ) -> Result<dashmap::mapref::one::RefMut<'_, u16, Account>, EngineError> {
         self.accounts
             .get_mut(&client)
             .ok_or(EngineError::AccountNotFound)
@@ -310,7 +311,6 @@ impl EngineFunctions for Engine {
         } else {
             Ok(())
         }
-
     }
 
     /// Reads transactions from a CSV file and processes them using the Engine.
@@ -480,7 +480,6 @@ impl EngineFunctions for Engine {
 
         Ok(())
     }
-
 }
 
 impl EngineStateTransitionFunctions for Engine {
@@ -533,9 +532,6 @@ impl EngineStateTransitionFunctions for Engine {
         Ok(())
     }
 
-
-    
-
     /// Process a withdrawal transaction.
     ///
     /// # Parameters
@@ -560,8 +556,8 @@ impl EngineStateTransitionFunctions for Engine {
         if self.transaction_log.contains_key(&tx.tx) {
             return Err(EngineError::TransactionRepeated);
         }
-       
-       let mut account = self.try_get_account(tx.client)?;
+
+        let mut account = self.try_get_account(tx.client)?;
 
         if account.available >= amount {
             account.available = Engine::safe_sub(&account.available, &amount)?;
@@ -569,7 +565,7 @@ impl EngineStateTransitionFunctions for Engine {
         } else {
             return Err(EngineError::InsufficientFunds);
         }
-           
+
         self.transaction_log.insert(tx.tx, tx.clone());
         Ok(())
     }
