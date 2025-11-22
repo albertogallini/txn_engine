@@ -1,19 +1,78 @@
+#![allow(async_fn_in_trait)]
+
 // src/async_engine.rs
 use crate::basics::hmap::ShardedRwLockMap; // your new map
-use crate::datastr::account::{serialize_account_balances_csv_async, Account};
+use crate::datastr::account::Account;
 use crate::datastr::transaction::{
     ClientId, Transaction, TransactionProcessingError, TransactionType, TxId,
 };
 use rust_decimal::Decimal;
 use std::collections::HashMap;
 use std::sync::Arc;
+use thiserror::Error;
 
+use csv_async::{AsyncReaderBuilder, AsyncWriterBuilder, Trim};
+use futures_util::stream::StreamExt;
 use tokio::fs::File;
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, BufWriter};
+use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt, BufReader, BufWriter};
 use tokio::sync::RwLockWriteGuard;
+
+use tokio_util::compat::TokioAsyncWriteCompatExt;
 
 // Reuse the same errors
 pub use crate::engine::{EngineError, EngineSerDeserError};
+
+#[derive(Debug, Error)]
+pub enum AsycEngineSerDeserError {
+    #[error("I/O error while reading session")]
+    Io(std::io::Error),
+    #[error("Parsing error while reading session csv")]
+    Csv(csv_async::Error),
+    #[error("Parsing error while reading session csv - InvalidClientId")]
+    InvalidClientId,
+    #[error("Parsing error while reading session csv - InvalidDecimal")]
+    InvalidDecimal,
+    #[error("Parsing error while reading session csv - InvalidBool")]
+    InvalidBool,
+}
+
+pub trait AsycEngineFunctions {
+    async fn read_and_process_transactions<R: AsyncRead + Unpin + Send>(
+        &self, // self is NOT mutable as this function can be called concurrently and its implementation must be thread-safe.
+        stream: R,
+        buffer_size: usize,
+    ) -> Result<(), TransactionProcessingError>;
+    async fn read_and_process_transactions_from_csv(
+        &mut self,
+        input_path: &str,
+        buffer_size: usize,
+    ) -> Result<(), TransactionProcessingError>;
+    async fn load_from_previous_session_csvs(
+        &mut self,
+        transactions_file: &str,
+        accounts_file: &str,
+    ) -> Result<(), AsycEngineSerDeserError>;
+    async fn dump_account_to_csv<W: AsyncWriteExt + Unpin + futures_util::AsyncWrite>(
+        &self,
+        writer: W,
+        buffer_size: usize,
+    ) -> Result<(), Box<dyn std::error::Error>>;
+    async fn dump_transaction_log_to_csv(
+        &self,
+        transactions_path: &str,
+        buffer_size: usize,
+    ) -> Result<(), Box<dyn std::error::Error>>;
+    async fn size_of(&self) -> usize;
+}
+
+trait AsycEngineStateTransitionFunctions {
+    async fn process_transaction(&self, tx: &Transaction) -> Result<(), EngineError>;
+    async fn process_deposit(&self, tx: &Transaction) -> Result<(), EngineError>;
+    async fn process_withdrawal(&self, tx: &Transaction) -> Result<(), EngineError>;
+    async fn process_dispute(&self, tx: &Transaction) -> Result<(), EngineError>;
+    async fn process_resolve(&self, tx: &Transaction) -> Result<(), EngineError>;
+    async fn process_chargeback(&self, tx: &Transaction) -> Result<(), EngineError>;
+}
 
 #[derive(Default)]
 pub struct AsyncEngine {
@@ -86,8 +145,212 @@ impl AsyncEngine {
     }
 }
 
-impl AsyncEngine {
-    pub async fn process_transaction(&self, tx: &Transaction) -> Result<(), EngineError> {
+impl AsycEngineFunctions for AsyncEngine {
+    async fn read_and_process_transactions<R: AsyncRead + Unpin + Send>(
+        &self,
+        stream: R,
+        buffer_size: usize,
+    ) -> Result<(), TransactionProcessingError> {
+        let reader = BufReader::with_capacity(buffer_size, stream);
+        let mut csv_reader = AsyncReaderBuilder::new()
+            .has_headers(true)
+            .trim(Trim::All)
+            .create_deserializer(reader);
+
+        let mut records = csv_reader.deserialize::<Transaction>();
+        let mut errors = Vec::with_capacity(1000);
+
+        while let Some(result) = records.next().await {
+            match result {
+                Ok(tx) => {
+                    if let Err(e) = self.process_transaction(&tx).await {
+                        errors.push(format!("Error processing {:?}: {}", tx, e));
+                    }
+                }
+                Err(e) => {
+                    let msg = e.to_string();
+                    if msg.contains("Unknown variant") {
+                        errors.push(
+                            ("Error reading transaction record: unknown transaction type")
+                                .to_string(),
+                        );
+                    } else {
+                        errors.push(format!("Error reading transaction record: {}", msg));
+                    }
+                }
+            }
+        }
+
+        if errors.is_empty() {
+            Ok(())
+        } else {
+            Err(TransactionProcessingError::MultipleErrors(errors))
+        }
+    }
+
+    async fn read_and_process_transactions_from_csv(
+        &mut self, // note: &self, not &mut self – we only write to thread-safe structures
+        input_path: &str,
+        buffer_size: usize,
+    ) -> Result<(), TransactionProcessingError> {
+        let file = File::open(input_path).await.map_err(|e| {
+            TransactionProcessingError::MultipleErrors(vec![format!("Error opening file: {}", e)])
+        })?;
+
+        let reader = BufReader::with_capacity(buffer_size, file);
+        self.read_and_process_transactions(reader, buffer_size)
+            .await
+    }
+
+    async fn load_from_previous_session_csvs(
+        &mut self,
+        transactions_file: &str,
+        accounts_file: &str,
+    ) -> Result<(), AsycEngineSerDeserError> {
+        // Load transactions
+        {
+            let file = File::open(transactions_file)
+                .await
+                .map_err(AsycEngineSerDeserError::Io)?;
+            let mut rdr = AsyncReaderBuilder::new()
+                .has_headers(true)
+                .trim(Trim::All)
+                .create_deserializer(BufReader::new(file));
+
+            let mut records = rdr.deserialize::<Transaction>();
+            while let Some(result) = records.next().await {
+                if let Ok(tx) = result {
+                    self.transaction_log.insert(tx.tx, tx).await;
+                } else {
+                    eprintln!("Skipping invalid transaction record: {:?}", result);
+                }
+            }
+        }
+
+        // Load accounts (custom format: client,available,held,total,locked)
+        {
+            let file = File::open(accounts_file)
+                .await
+                .map_err(AsycEngineSerDeserError::Io)?;
+
+            let mut reader = AsyncReaderBuilder::new()
+                .has_headers(true)
+                .trim(Trim::All)
+                .create_deserializer(BufReader::new(file));
+
+            type AccountTuple = (ClientId, Decimal, Decimal, Decimal, bool);
+
+            let mut records = reader.deserialize::<AccountTuple>();
+
+            while let Some(result) = records.next().await {
+                let (client_id, available, held, total, locked) =
+                    result.map_err(AsycEngineSerDeserError::Csv)?;
+
+                let account = Account {
+                    available,
+                    held,
+                    total,
+                    locked,
+                };
+
+                self.accounts.insert(client_id, account).await;
+            }
+        }
+
+        Ok(())
+    }
+
+    async fn dump_account_to_csv<W: AsyncWrite + Unpin + futures_util::AsyncWrite>(
+        &self,
+        writer: W,
+        buffer_size: usize,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let compat_writer = writer.compat_write();
+        let mut csv_writer = AsyncWriterBuilder::new()
+            .buffer_capacity(buffer_size)
+            .create_serializer(compat_writer);
+
+        // Write header
+        csv_writer
+            .serialize(("client", "available", "held", "total", "locked"))
+            .await?;
+
+        let mut iter = self.accounts.iter().await;
+        while let Some((client_id, shard_guard)) = iter.next().await {
+            // Safety: we know key exists in this shard
+            if let Some(account) = shard_guard.get(&client_id) {
+                csv_writer
+                    .serialize((
+                        client_id,
+                        account.available,
+                        account.held,
+                        account.total,
+                        account.locked,
+                    ))
+                    .await?;
+
+                //flush every N records to reduce memory
+                if client_id % 1000 == 0 {
+                    csv_writer.flush().await?;
+                }
+            }
+        }
+
+        // Write header + all buffered data in one go
+        csv_writer.flush().await?;
+
+        Ok(())
+    }
+
+    async fn dump_transaction_log_to_csv(
+        &self,
+        transactions_path: &str,
+        buffer_size: usize,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let file = File::create(transactions_path).await?;
+        let buffered_file = BufWriter::with_capacity(buffer_size, file);
+
+        let mut csv_writer = AsyncWriterBuilder::new()
+            .buffer_capacity(buffer_size)
+            .create_serializer(buffered_file); // ← works directly!
+
+        // Write header
+        csv_writer
+            .serialize(("type", "client", "tx", "amount", "disputed"))
+            .await?;
+
+        let mut iter = self.transaction_log.iter().await;
+        while let Some((tx_id, shard_guard)) = iter.next().await {
+            if let Some(transaction) = shard_guard.get(&tx_id) {
+                // Write a record to the CSV file
+                csv_writer
+                    .serialize((
+                        transaction.ty.clone(),
+                        transaction.client,
+                        transaction.tx,
+                        transaction.amount,
+                        transaction.disputed,
+                    ))
+                    .await?;
+            }
+        }
+        csv_writer.flush().await?;
+        Ok(())
+    }
+
+    async fn size_of(&self) -> usize {
+        let accounts_size = self.accounts.len().await
+            * (std::mem::size_of::<ClientId>() + std::mem::size_of::<Account>());
+
+        let tx_log_size = self.transaction_log.len().await
+            * (std::mem::size_of::<TxId>() + std::mem::size_of::<Transaction>());
+
+        std::mem::size_of::<Self>() + accounts_size + tx_log_size
+    }
+}
+
+impl AsycEngineStateTransitionFunctions for AsyncEngine {
+    async fn process_transaction(&self, tx: &Transaction) -> Result<(), EngineError> {
         match tx.ty {
             TransactionType::Deposit => self.process_deposit(tx).await,
             TransactionType::Withdrawal => self.process_withdrawal(tx).await,
@@ -189,63 +452,5 @@ impl AsyncEngine {
             return Err(EngineError::TransactionNotFound);
         }
         Ok(())
-    }
-
-    pub async fn read_and_process_transactions_from_csv(
-        &self,
-        path: &str,
-    ) -> Result<(), TransactionProcessingError> {
-        let file = File::open(path).await.map_err(|e| {
-            TransactionProcessingError::MultipleErrors(vec![format!("Failed to open file: {}", e)])
-        })?;
-        let reader = BufReader::new(file);
-        let mut lines = reader.lines();
-
-        // Skip header
-        let _ = lines.next_line().await;
-
-        let mut errors = Vec::new();
-        while let Ok(Some(line)) = lines.next_line().await {
-            match csv::ReaderBuilder::new()
-                .has_headers(false)
-                .from_reader(line.as_bytes())
-                .deserialize::<Transaction>()
-                .next()
-            {
-                Some(Ok(tx)) => {
-                    if let Err(e) = self.process_transaction(&tx).await {
-                        errors.push(format!("tx {}: {}", tx.tx, e));
-                    }
-                }
-                Some(Err(e)) => errors.push(format!("CSV error: {}", e)),
-                None => continue,
-            }
-        }
-
-        if errors.is_empty() {
-            Ok(())
-        } else {
-            Err(TransactionProcessingError::MultipleErrors(errors))
-        }
-    }
-
-    pub async fn dump_accounts_to_csv(
-        &self,
-        path: &str,
-    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        let file = File::create(path).await?;
-        let mut writer = BufWriter::new(file);
-        writer
-            .write_all(b"client,available,held,total,locked\n")
-            .await?;
-        serialize_account_balances_csv_async(&self.accounts, &mut writer).await?;
-        writer.flush().await?;
-        Ok(())
-    }
-
-    pub async fn size_of(&self) -> usize {
-        let accounts = self.accounts.len().await;
-        let txns = self.transaction_log.len().await;
-        accounts * 80 + txns * 120 // rough estimate
     }
 }

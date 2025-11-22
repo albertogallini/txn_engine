@@ -71,7 +71,7 @@ impl From<csv::Error> for EngineSerDeserError {
 
 pub trait EngineFunctions {
     fn read_and_process_transactions<R: Read>(
-        &self, // self is NOT mutable as this function can be called concurrently and its implementation must be thread-safe.
+        &self,
         stream: R,
         buffer_size: usize,
     ) -> Result<(), TransactionProcessingError>;
