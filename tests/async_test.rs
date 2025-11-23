@@ -2,7 +2,10 @@ use rust_decimal::Decimal;
 use std::str::FromStr;
 use std::sync::Arc;
 use tempfile::NamedTempFile;
-use txn_engine::{asyncengine::{AsycEngineFunctions, AsyncEngine}, datastr::transaction::TransactionProcessingError};
+use txn_engine::{
+    asyncengine::{AsycEngineFunctions, AsyncEngine},
+    datastr::transaction::TransactionProcessingError,
+};
 
 use std::io::Write;
 
@@ -917,7 +920,6 @@ async fn reg_test_from_csv_file_basic_async() {
     };
 }
 
-
 ///Tests the handling of several erroneous transactions from a CSV file.
 
 /// type       ,client,tx   ,amount
@@ -955,8 +957,11 @@ async fn reg_test_from_csv_file_error_conditions_async() {
     let input_path = "tests/transactions_errors.csv";
 
     let _ = {
-        tokio::spawn( async move {
-            match engine.read_and_process_transactions_from_csv(input_path, BUFFER_SIZE).await {
+        tokio::spawn(async move {
+            match engine
+                .read_and_process_transactions_from_csv(input_path, BUFFER_SIZE)
+                .await
+            {
                 Ok(()) => panic!("Expected an error, but got success"),
                 Err(TransactionProcessingError::MultipleErrors(errors)) => {
                     let expected_errors = vec![
@@ -992,5 +997,48 @@ async fn reg_test_from_csv_file_error_conditions_async() {
                 }
             }
         });
+    };
+}
+
+/// Tests that processing a CSV file with malformed records results in the expected errors.
+///
+/// Verifies that:
+/// 1. The `TransactionProcessingError::MultipleErrors` variant is returned.
+/// 2. The errors are correctly sorted alphabetically.
+/// 3. The accounts are correctly updated after the transactions are processed.
+#[tokio::test]
+async fn reg_test_from_csv_file_malformed_async() {
+    let engine = Arc::new(AsyncEngine::new());
+    let input_path = "tests/transactions_malformed.csv";
+
+    let _ = {
+        tokio::spawn(async move {
+            match engine
+                .read_and_process_transactions_from_csv(input_path, BUFFER_SIZE)
+                .await
+            {
+                Ok(()) => panic!("Expected an error, but got success"),
+                Err(TransactionProcessingError::MultipleErrors(errors)) => {
+                    let expected_errors = vec![
+                        "Error reading transaction record: CSV deserialize error: record 1 (line: 2, byte: 22): invalid digit found in string",
+                        "Error reading transaction record: Unknown transaction type: deposi",
+                        "Error reading transaction record: Unknown transaction type: witawal",
+                        "Error processing Transaction { ty: Withdrawal, client: 1, tx: 3, amount: Some(5.0000), disputed: false }: Account not found",
+                    ];
+
+                    // Compare the sorted errors to ensure the order doesn't matter
+                    let mut actual_errors = errors.clone();
+                    actual_errors.sort();
+                    let mut expected_errors_sorted = expected_errors;
+                    expected_errors_sorted.sort();
+
+                    assert_eq!(
+                        actual_errors, expected_errors_sorted,
+                        "Errors do not match expected errors"
+                    );
+                }
+            }
+            assert_eq!(engine.accounts.len().await, 1);
+        })
     };
 }
