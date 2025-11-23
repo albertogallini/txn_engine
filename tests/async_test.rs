@@ -181,7 +181,6 @@ async fn unit_test_dispute_deposit_after_withdrawal_async() {
     handle.await.unwrap();
 }
 
-
 #[tokio::test]
 async fn unit_test_double_dispute_async() {
     let mut temp_file = NamedTempFile::new().unwrap();
@@ -533,7 +532,8 @@ async fn unit_test_deposit_negative_async() {
             assert!(result.is_err());
             let err = result.unwrap_err();
             assert!(
-                err.to_string().contains("Deposit amount must be greater than 0"),
+                err.to_string()
+                    .contains("Deposit amount must be greater than 0"),
                 "Expected `Deposit amount must be greater than 0` error."
             );
 
@@ -590,7 +590,8 @@ async fn unit_test_withdrawal_negative_async() {
             assert!(result.is_err());
             let err = result.unwrap_err();
             assert!(
-                err.to_string().contains("Withdrawal amount must be greater than 0"),
+                err.to_string()
+                    .contains("Withdrawal amount must be greater than 0"),
                 "Expected `Withdrawal amount must be greater than 0` error."
             );
 
