@@ -238,13 +238,22 @@ impl AsycEngineFunctions for AsyncEngine {
                 .trim(Trim::All)
                 .create_deserializer(BufReader::new(file));
 
-            type AccountTuple = (ClientId, Decimal, Decimal, Decimal, bool);
+            type AccountTuple = (ClientId, String, String, String, bool);
 
             let mut records = reader.deserialize::<AccountTuple>();
 
             while let Some(result) = records.next().await {
-                let (client_id, available, held, total, locked) =
+                let (client_id, available_str, held_str, total_str, locked) =
                     result.map_err(AsycEngineSerDeserError::Csv)?;
+
+                let to_dec = |s: String| -> Result<Decimal, _> {
+                    s.parse::<Decimal>()
+                        .map_err(|_| AsycEngineSerDeserError::InvalidDecimal)
+                };
+
+                let available = to_dec(available_str)?;
+                let held = to_dec(held_str)?;
+                let total = to_dec(total_str)?;
 
                 let account = Account {
                     available,
