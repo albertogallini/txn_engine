@@ -43,12 +43,12 @@ pub trait AsycEngineFunctions {
         buffer_size: usize,
     ) -> Result<(), TransactionProcessingError>;
     async fn read_and_process_transactions_from_csv(
-        &mut self,
+        &self,
         input_path: &str,
         buffer_size: usize,
     ) -> Result<(), TransactionProcessingError>;
     async fn load_from_previous_session_csvs(
-        &mut self,
+        &self,
         transactions_file: &str,
         accounts_file: &str,
     ) -> Result<(), AsycEngineSerDeserError>;
@@ -189,7 +189,7 @@ impl AsycEngineFunctions for AsyncEngine {
     }
 
     async fn read_and_process_transactions_from_csv(
-        &mut self, // note: &self, not &mut self – we only write to thread-safe structures
+        &self, // note: &self, not &mut self – we only write to thread-safe structures
         input_path: &str,
         buffer_size: usize,
     ) -> Result<(), TransactionProcessingError> {
@@ -203,7 +203,7 @@ impl AsycEngineFunctions for AsyncEngine {
     }
 
     async fn load_from_previous_session_csvs(
-        &mut self,
+        &self,
         transactions_file: &str,
         accounts_file: &str,
     ) -> Result<(), AsycEngineSerDeserError> {

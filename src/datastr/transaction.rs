@@ -3,6 +3,7 @@ use dashmap::DashMap;
 use rust_decimal::Decimal;
 use serde::{Deserialize, Deserializer, Serialize};
 use std::{fmt, io::Write};
+use thiserror::Error;
 
 use super::deser::{deserialize_amount, deserialize_trimmed_string};
 
@@ -66,32 +67,33 @@ pub struct Transaction {
     pub disputed: bool,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum TransactionProcessingError {
+    #[error("Transaction processing encountered multiple errors: {0:?}")]
     MultipleErrors(Vec<String>),
 }
 
-impl fmt::Display for TransactionProcessingError {
-    /// Formats a `TransactionProcessingError` as a string.
-    ///
-    /// # Parameters
-    /// - `f`: The `Formatter` to write to.
-    ///
-    /// # Returns
-    /// - `Ok(())`: If the error is successfully formatted.
-    /// - `Err(fmt::Error)`: If the formatting fails.
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            TransactionProcessingError::MultipleErrors(errors) => {
-                writeln!(f, "Some errors occurred while processing transactions:")?;
-                for error in errors {
-                    writeln!(f, "  - {}", error)?;
-                }
-                Ok(())
-            }
-        }
-    }
-}
+// impl fmt::Display for TransactionProcessingError {
+//     /// Formats a `TransactionProcessingError` as a string.
+//     ///
+//     /// # Parameters
+//     /// - `f`: The `Formatter` to write to.
+//     ///
+//     /// # Returns
+//     /// - `Ok(())`: If the error is successfully formatted.
+//     /// - `Err(fmt::Error)`: If the formatting fails.
+//     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+//         match self {
+//             TransactionProcessingError::MultipleErrors(errors) => {
+//                 writeln!(f, "Some errors occurred while processing transactions:")?;
+//                 for error in errors {
+//                     writeln!(f, "  - {}", error)?;
+//                 }
+//                 Ok(())
+//             }
+//         }
+//     }
+// }
 
 /// Writes the transaction log to a CSV file.
 ///
