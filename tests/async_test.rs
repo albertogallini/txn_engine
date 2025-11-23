@@ -2,7 +2,7 @@ use rust_decimal::Decimal;
 use std::str::FromStr;
 use std::sync::Arc;
 use tempfile::NamedTempFile;
-use txn_engine::asyncengine::{AsycEngineFunctions, AsyncEngine};
+use txn_engine::{asyncengine::{AsycEngineFunctions, AsyncEngine}, datastr::transaction::TransactionProcessingError};
 
 use std::io::Write;
 
@@ -19,7 +19,7 @@ async fn unit_test_deposit_and_withdrawal_async() {
     let engine = Arc::new(AsyncEngine::default());
 
     let handle = {
-        let engine = Arc::clone(&engine);
+        //no need to use it afterward -- let engine = Arc::clone(&engine);
         let input_path = input_path.clone();
 
         tokio::spawn(async move {
@@ -78,8 +78,8 @@ async fn unit_test_deposit_and_dispute_async() {
     let engine = Arc::new(AsyncEngine::default());
 
     let handle = {
-        let engine = Arc::clone(&engine);
-        let input_path = input_path.clone();
+        //no need to use it afterward -- let engine = Arc::clone(&engine);
+        //no need to use it afterward -- let input_path = input_path.clone();
 
         tokio::spawn(async move {
             engine
@@ -140,9 +140,8 @@ async fn unit_test_dispute_deposit_after_withdrawal_async() {
     let engine = Arc::new(AsyncEngine::default());
 
     let handle = {
-        let engine = Arc::clone(&engine);
-        let input_path = input_path.clone();
-
+        //no need to use it afterward -- let engine = Arc::clone(&engine);
+        //no need to use it afterward -- let input_path = input_path.clone();
         tokio::spawn(async move {
             engine
                 .read_and_process_transactions_from_csv(&input_path, BUFFER_SIZE)
@@ -196,8 +195,8 @@ async fn unit_test_double_dispute_async() {
     let engine = Arc::new(AsyncEngine::default());
 
     let handle = {
-        let engine = Arc::clone(&engine);
-        let input_path = input_path.clone();
+        //no need to use it afterward -- let engine = Arc::clone(&engine);
+        //no need to use it afterward -- let input_path = input_path.clone();
 
         tokio::spawn(async move {
             engine
@@ -250,8 +249,8 @@ async fn unit_test_txid_reused_after_dispute_and_resolve_async() {
     let engine = Arc::new(AsyncEngine::default());
 
     let handle = {
-        let engine = Arc::clone(&engine);
-        let input_path = input_path.clone();
+        //no need to use it afterward -- let engine = Arc::clone(&engine);
+        //no need to use it afterward -- let input_path = input_path.clone();
 
         tokio::spawn(async move {
             let result = engine
@@ -308,8 +307,8 @@ async fn unit_test_deposit_and_dispute_resolve_async() {
     let engine = Arc::new(AsyncEngine::default());
 
     let handle = {
-        let engine = Arc::clone(&engine);
-        let input_path = input_path.clone();
+        //no need to use it afterward -- let engine = Arc::clone(&engine);
+        //no need to use it afterward -- let input_path = input_path.clone();
 
         tokio::spawn(async move {
             engine
@@ -360,8 +359,8 @@ async fn unit_test_deposit_and_dispute_chargeback_async() {
     let engine = Arc::new(AsyncEngine::default());
 
     let handle = {
-        let engine = Arc::clone(&engine);
-        let input_path = input_path.clone();
+        //no need to use it afterward -- let engine = Arc::clone(&engine);
+        //no need to use it afterward -- let input_path = input_path.clone();
 
         tokio::spawn(async move {
             engine
@@ -413,8 +412,8 @@ async fn unit_test_deposit_withdrawal_dispute_withdrawal_async() {
     let engine = Arc::new(AsyncEngine::default());
 
     let handle = {
-        let engine = Arc::clone(&engine);
-        let input_path = input_path.clone();
+        //no need to use it afterward -- let engine = Arc::clone(&engine);
+        //no need to use it afterward -- let input_path = input_path.clone();
 
         tokio::spawn(async move {
             engine
@@ -464,8 +463,8 @@ async fn unit_test_deposit_withdrawal_too_much_async() {
     let engine = Arc::new(AsyncEngine::default());
 
     let handle = {
-        let engine = Arc::clone(&engine);
-        let input_path = input_path.clone();
+        //no need to use it afterward -- let engine = Arc::clone(&engine);
+        //no need to use it afterward -- let input_path = input_path.clone();
 
         tokio::spawn(async move {
             let result = engine
@@ -521,8 +520,8 @@ async fn unit_test_deposit_negative_async() {
     let engine = Arc::new(AsyncEngine::default());
 
     let handle = {
-        let engine = Arc::clone(&engine);
-        let input_path = input_path.clone();
+        //no need to use it afterward -- let engine = Arc::clone(&engine);
+        //no need to use it afterward -- let input_path = input_path.clone();
 
         tokio::spawn(async move {
             let result = engine
@@ -579,8 +578,8 @@ async fn unit_test_withdrawal_negative_async() {
     let engine = Arc::new(AsyncEngine::default());
 
     let handle = {
-        let engine = Arc::clone(&engine);
-        let input_path = input_path.clone();
+        //no need to use it afterward -- let engine = Arc::clone(&engine);
+        //no need to use it afterward -- let input_path = input_path.clone();
 
         tokio::spawn(async move {
             let result = engine
@@ -637,8 +636,8 @@ async fn unit_test_withdrawal_from_zero_async() {
     let engine = Arc::new(AsyncEngine::default());
 
     let handle = {
-        let engine = Arc::clone(&engine);
-        let input_path = input_path.clone();
+        //no need to use it afterward -- let engine = Arc::clone(&engine);
+        //no need to use it afterward -- let input_path = input_path.clone();
 
         tokio::spawn(async move {
             let result = engine
@@ -699,8 +698,8 @@ async fn unit_test_addition_overflow_async() {
     let engine = Arc::new(AsyncEngine::default());
 
     let handle = {
-        let engine = Arc::clone(&engine);
-        let input_path = input_path.clone();
+        //no need to use it afterward -- let engine = Arc::clone(&engine);
+        //no need to use it afterward -- let input_path = input_path.clone();
 
         tokio::spawn(async move {
             let result = engine
@@ -748,8 +747,8 @@ async fn unit_test_decimal_precision_async() {
     let engine = Arc::new(AsyncEngine::default());
 
     let handle = {
-        let engine = Arc::clone(&engine);
-        let input_path = input_path.clone();
+        //no need to use it afterward -- let engine = Arc::clone(&engine);
+        //no need to use it afterward -- let input_path = input_path.clone();
 
         tokio::spawn(async move {
             let result = engine
@@ -827,9 +826,9 @@ async fn unit_test_subtraction_overflow_async() {
     let engine = Arc::new(AsyncEngine::new());
 
     let handle = {
-        let engine = Arc::clone(&engine);
-        let transactions_path = transactions_path.clone();
-        let accounts_path = accounts_path.clone();
+        //no need to use it afterward -- let engine = Arc::clone(&engine);
+        //no need to use it afterward -- let transactions_path = transactions_path.clone();
+        //no need to use it afterward -- let accounts_path = accounts_path.clone();
 
         tokio::spawn(async move {
             // 1. Load the "corrupted" state from previous session
@@ -864,4 +863,134 @@ async fn unit_test_subtraction_overflow_async() {
     };
 
     handle.await.unwrap();
+}
+
+#[tokio::test]
+async fn reg_test_from_csv_file_basic_async() {
+    // Arrange: Use the real CSV file from tests/ folder
+    let input_path = "tests/transactions_basic.csv";
+
+    // Create the async engine
+    let engine = Arc::new(AsyncEngine::new());
+
+    let _ = {
+        tokio::spawn(async move {
+            //no need to use it afterward -- let engine = Arc::clone(&engine);
+            match engine
+                .read_and_process_transactions_from_csv(input_path, BUFFER_SIZE)
+                .await
+            {
+                Ok(()) => println!("Transactions processed successfully"),
+                Err(e) => println!(" Some error occurred while processing transactions: {}", e),
+            }
+
+            // If your AsyncEngine doesn't expose accounts via DashMap, you can iterate:
+            assert_eq!(engine.accounts.len().await, 2, "There should be 2 accounts");
+
+            let account_guard = engine.accounts.get(1).await.unwrap();
+            let account1 = account_guard.get(&1).unwrap();
+
+            assert_eq!(
+                account1.total,
+                Decimal::from_str("10.0001").unwrap(),
+                "Account 1 total should be 10.0001"
+            );
+            assert_eq!(
+                account1.total, account1.available,
+                "Account 1 total should equal available"
+            );
+            assert_eq!(account1.held, Decimal::ZERO, "Account 1 held should be 0");
+
+            let account_guard = engine.accounts.get(2).await.unwrap();
+            let account2 = account_guard.get(&1).unwrap();
+            assert_eq!(
+                account2.total,
+                Decimal::from_str("5").unwrap(),
+                "Account 2 total should be 5"
+            );
+            assert_eq!(
+                account2.total, account2.available,
+                "Account 2 total should equal available"
+            );
+            assert_eq!(account2.held, Decimal::ZERO, "Account 2 held should be 0");
+        })
+    };
+}
+
+
+///Tests the handling of several erroneous transactions from a CSV file.
+
+/// type       ,client,tx   ,amount
+
+/// deposit    ,6     ,9    ,0.0000
+/// withdrawal ,6     ,10   ,-5.0000       # Negative amount, should fail
+/// deposit    ,6     ,11   ,79228162514264337593543950330  # Large amount
+/// deposit    ,6     ,12   ,5000.0000     # Addition overflowed
+/// withdrawal ,6     ,13   ,              # Empty amount --> fail
+
+/// deposit    ,7     ,14   ,              # Empty amount --> fail
+/// deposit    ,7     ,15   ,10.0
+/// deposit    ,7     ,15   ,10.0          # Duplicate tx
+/// dispute    ,7     ,16   ,              # Dispute on non-existent or invalid tx
+
+/// resolve    ,6     ,9999 ,              # Resolve on non-existent tx
+
+/// chargeback ,7     ,16   ,              # Chargeback on non-existent tx
+
+/// dispute    ,7     ,15   ,
+/// dispute    ,7     ,15   ,              # Transaction already disputed
+/// chargeback ,7     ,15   ,
+/// deposit    ,7     ,17   ,10            # Account is locked
+/// deposit    ,8     ,18   ,10
+/// resolve    ,8     ,18   ,              # Transaction not disputed
+///
+/// deposit    ,9     ,20  ,100
+/// withdrawal ,9     ,21  ,200            # Insufficient funds : the transaction does NOT gets into the transaction log.
+/// dispute    ,9     ,21  ,               # Dispute on non-existent or invalid tx
+/// The test checks that the correct errors are reported.
+///
+#[tokio::test]
+async fn reg_test_from_csv_file_error_conditions_async() {
+    let engine = Arc::new(AsyncEngine::new());
+    let input_path = "tests/transactions_errors.csv";
+
+    let _ = {
+        tokio::spawn( async move {
+            match engine.read_and_process_transactions_from_csv(input_path, BUFFER_SIZE).await {
+                Ok(()) => panic!("Expected an error, but got success"),
+                Err(TransactionProcessingError::MultipleErrors(errors)) => {
+                    let expected_errors = vec![
+                        "Error reading transaction record: Unknown transaction type: DEPOSIT",
+                        "Error processing Transaction { ty: Deposit, client: 6, tx: 9, amount: Some(0.0000), disputed: false }: Deposit amount must be greater than 0",
+                        "Error processing Transaction { ty: Withdrawal, client: 6, tx: 10, amount: Some(-5.0000), disputed: false }: Withdrawal amount must be greater than 0",
+                        "Error processing Transaction { ty: Deposit, client: 6, tx: 12, amount: Some(5000.0000), disputed: false }: Addition overflow",
+                        "Error processing Transaction { ty: Withdrawal, client: 6, tx: 13, amount: None, disputed: false }: Transaction must have an amount",
+                        "Error processing Transaction { ty: Deposit, client: 7, tx: 14, amount: None, disputed: false }: Transaction must have an amount",
+                        "Error processing Transaction { ty: Deposit, client: 7, tx: 15, amount: Some(10), disputed: false }: Transaction id already processed in this session - cannot be repeated.",
+                        "Error processing Transaction { ty: Dispute, client: 7, tx: 16, amount: None, disputed: false }: Transaction not found",
+                        "Error processing Transaction { ty: Resolve, client: 6, tx: 9999, amount: None, disputed: false }: Transaction not found",
+                        "Error processing Transaction { ty: Chargeback, client: 7, tx: 16, amount: None, disputed: false }: Transaction not found",
+                        "Error processing Transaction { ty: Dispute, client: 7, tx: 15, amount: None, disputed: false }: Transaction already disputed",
+                        "Error processing Transaction { ty: Deposit, client: 7, tx: 17, amount: Some(10), disputed: false }: Account is locked",
+                        "Error processing Transaction { ty: Resolve, client: 8, tx: 18, amount: None, disputed: false }: Transaction not disputed",
+                        "Error processing Transaction { ty: Withdrawal, client: 9, tx: 21, amount: Some(200), disputed: false }: Insufficient funds",
+                        "Error processing Transaction { ty: Dispute, client: 9, tx: 21, amount: None, disputed: false }: Transaction not found",
+                    ];
+
+                    // Compare the sorted errors to ensure the order doesn't matter
+                    let mut actual_errors = errors.clone();
+                    actual_errors.sort();
+                    let mut expected_errors_sorted = expected_errors;
+                    expected_errors_sorted.sort();
+
+                    assert_eq!(
+                        actual_errors, expected_errors_sorted,
+                        "Errors do not match expected errors"
+                    );
+
+                    assert_eq!(engine.accounts.len().await, 4);
+                }
+            }
+        });
+    };
 }
