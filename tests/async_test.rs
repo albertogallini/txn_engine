@@ -8,6 +8,7 @@ use txn_engine::{
 };
 
 use std::io::Write;
+use txn_engine::datastr::transaction::TransactionType;
 
 const BUFFER_SIZE: usize = 16_384;
 
@@ -876,7 +877,7 @@ async fn reg_test_from_csv_file_basic_async() {
     // Create the async engine
     let engine = Arc::new(AsyncEngine::new());
 
-    let _ = {
+    let handle = {
         tokio::spawn(async move {
             //no need to use it afterward -- let engine = Arc::clone(&engine);
             match engine
@@ -905,7 +906,7 @@ async fn reg_test_from_csv_file_basic_async() {
             assert_eq!(account1.held, Decimal::ZERO, "Account 1 held should be 0");
 
             let account_guard = engine.accounts.get(2).await.unwrap();
-            let account2 = account_guard.get(&1).unwrap();
+            let account2 = account_guard.get(&2).unwrap();
             assert_eq!(
                 account2.total,
                 Decimal::from_str("5").unwrap(),
@@ -918,6 +919,7 @@ async fn reg_test_from_csv_file_basic_async() {
             assert_eq!(account2.held, Decimal::ZERO, "Account 2 held should be 0");
         })
     };
+    handle.await.unwrap();
 }
 
 ///Tests the handling of several erroneous transactions from a CSV file.
@@ -956,48 +958,48 @@ async fn reg_test_from_csv_file_error_conditions_async() {
     let engine = Arc::new(AsyncEngine::new());
     let input_path = "tests/transactions_errors.csv";
 
-    let _ = {
-        tokio::spawn(async move {
-            match engine
-                .read_and_process_transactions_from_csv(input_path, BUFFER_SIZE)
-                .await
-            {
-                Ok(()) => panic!("Expected an error, but got success"),
-                Err(TransactionProcessingError::MultipleErrors(errors)) => {
-                    let expected_errors = vec![
-                        "Error reading transaction record: Unknown transaction type: DEPOSIT",
-                        "Error processing Transaction { ty: Deposit, client: 6, tx: 9, amount: Some(0.0000), disputed: false }: Deposit amount must be greater than 0",
-                        "Error processing Transaction { ty: Withdrawal, client: 6, tx: 10, amount: Some(-5.0000), disputed: false }: Withdrawal amount must be greater than 0",
-                        "Error processing Transaction { ty: Deposit, client: 6, tx: 12, amount: Some(5000.0000), disputed: false }: Addition overflow",
-                        "Error processing Transaction { ty: Withdrawal, client: 6, tx: 13, amount: None, disputed: false }: Transaction must have an amount",
-                        "Error processing Transaction { ty: Deposit, client: 7, tx: 14, amount: None, disputed: false }: Transaction must have an amount",
-                        "Error processing Transaction { ty: Deposit, client: 7, tx: 15, amount: Some(10), disputed: false }: Transaction id already processed in this session - cannot be repeated.",
-                        "Error processing Transaction { ty: Dispute, client: 7, tx: 16, amount: None, disputed: false }: Transaction not found",
-                        "Error processing Transaction { ty: Resolve, client: 6, tx: 9999, amount: None, disputed: false }: Transaction not found",
-                        "Error processing Transaction { ty: Chargeback, client: 7, tx: 16, amount: None, disputed: false }: Transaction not found",
-                        "Error processing Transaction { ty: Dispute, client: 7, tx: 15, amount: None, disputed: false }: Transaction already disputed",
-                        "Error processing Transaction { ty: Deposit, client: 7, tx: 17, amount: Some(10), disputed: false }: Account is locked",
-                        "Error processing Transaction { ty: Resolve, client: 8, tx: 18, amount: None, disputed: false }: Transaction not disputed",
-                        "Error processing Transaction { ty: Withdrawal, client: 9, tx: 21, amount: Some(200), disputed: false }: Insufficient funds",
-                        "Error processing Transaction { ty: Dispute, client: 9, tx: 21, amount: None, disputed: false }: Transaction not found",
-                    ];
+    // Call the method directly and await it — no spawn needed!
+    let result = engine
+        .read_and_process_transactions_from_csv(input_path, BUFFER_SIZE)
+        .await;
 
-                    // Compare the sorted errors to ensure the order doesn't matter
-                    let mut actual_errors = errors.clone();
-                    actual_errors.sort();
-                    let mut expected_errors_sorted = expected_errors;
-                    expected_errors_sorted.sort();
+    match result {
+        Ok(()) => panic!("Expected an error, but got success"),
+        Err(TransactionProcessingError::MultipleErrors(errors)) => {
+            let expected_errors = vec![
+                "Error reading transaction record: CSV deserialize error: record 18 (line 19, byte: 335): Unknown transaction type: DEPOSIT",
+                "Error processing Transaction { ty: Deposit, client: 6, tx: 9, amount: Some(0.0000), disputed: false }: Deposit amount must be greater than 0",
+                "Error processing Transaction { ty: Withdrawal, client: 6, tx: 10, amount: Some(-5.0000), disputed: false }: Withdrawal amount must be greater than 0",
+                "Error processing Transaction { ty: Deposit, client: 6, tx: 12, amount: Some(5000.0000), disputed: false }: Addition overflow",
+                "Error processing Transaction { ty: Withdrawal, client: 6, tx: 13, amount: None, disputed: false }: Transaction must have an amount",
+                "Error processing Transaction { ty: Deposit, client: 7, tx: 14, amount: None, disputed: false }: Transaction must have an amount",
+                "Error processing Transaction { ty: Deposit, client: 7, tx: 15, amount: Some(10), disputed: false }: Transaction id already processed in this session - cannot be repeated.",
+                "Error processing Transaction { ty: Dispute, client: 7, tx: 16, amount: None, disputed: false }: Transaction not found",
+                "Error processing Transaction { ty: Resolve, client: 6, tx: 9999, amount: None, disputed: false }: Transaction not found",
+                "Error processing Transaction { ty: Chargeback, client: 7, tx: 16, amount: None, disputed: false }: Transaction not found",
+                "Error processing Transaction { ty: Dispute, client: 7, tx: 15, amount: None, disputed: false }: Transaction already disputed",
+                "Error processing Transaction { ty: Deposit, client: 7, tx: 17, amount: Some(10), disputed: false }: Account is locked",
+                "Error processing Transaction { ty: Resolve, client: 8, tx: 18, amount: None, disputed: false }: Transaction not disputed",
+                "Error processing Transaction { ty: Withdrawal, client: 9, tx: 21, amount: Some(200), disputed: false }: Insufficient funds",
+                "Error processing Transaction { ty: Dispute, client: 9, tx: 21, amount: None, disputed: false }: Transaction not found",
+            ];
 
-                    assert_eq!(
-                        actual_errors, expected_errors_sorted,
-                        "Errors do not match expected errors"
-                    );
+            let mut actual_errors = errors.iter().map(|e| e.to_string()).collect::<Vec<_>>();
+            actual_errors.sort();
+            let mut expected_errors_sorted = expected_errors
+                .iter()
+                .map(|s| s.to_string())
+                .collect::<Vec<_>>();
+            expected_errors_sorted.sort();
 
-                    assert_eq!(engine.accounts.len().await, 4);
-                }
-            }
-        });
-    };
+            assert_eq!(
+                actual_errors, expected_errors_sorted,
+                "Errors do not match expected errors"
+            );
+
+            assert_eq!(engine.accounts.len().await, 4);
+        }
+    }
 }
 
 /// Tests that processing a CSV file with malformed records results in the expected errors.
@@ -1011,34 +1013,123 @@ async fn reg_test_from_csv_file_malformed_async() {
     let engine = Arc::new(AsyncEngine::new());
     let input_path = "tests/transactions_malformed.csv";
 
-    let _ = {
+    match engine
+        .read_and_process_transactions_from_csv(input_path, BUFFER_SIZE)
+        .await
+    {
+        Ok(()) => panic!("Expected an error, but got success"),
+        Err(TransactionProcessingError::MultipleErrors(errors)) => {
+            let expected_errors = vec![
+                "Error processing Transaction { ty: Withdrawal, client: 1, tx: 3, amount: Some(5.0000), disputed: false }: Account not found",
+                "Error reading transaction record: CSV deserialize error: record 1 (line 2, byte: 22): invalid digit found in string", 
+                "Error reading transaction record: CSV deserialize error: record 2 (line 3, byte: 46): Unknown transaction type: deposi",
+                "Error reading transaction record: CSV deserialize error: record 4 (line 5, byte: 94): Unknown transaction type: witawal"
+            ];
+
+            // Compare the sorted errors to ensure the order doesn't matter
+            let mut actual_errors = errors.clone();
+            actual_errors.sort();
+            let mut expected_errors_sorted = expected_errors;
+            expected_errors_sorted.sort();
+
+            assert_eq!(
+                actual_errors, expected_errors_sorted,
+                "Errors do not match expected errors"
+            );
+        }
+    }
+    assert_eq!(engine.accounts.len().await, 1);
+}
+
+/// Tests loading transactions and accounts from CSV files into the `Engine`.
+///
+/// This test creates temporary CSV files for transactions and accounts,
+/// writes predefined data into them, and then loads this data into an
+/// `Engine` instance using the `load_from_previous_session_csvs` method.
+///
+/// It verifies that the transactions and accounts are correctly loaded by
+/// asserting the number of entries and checking specific transaction and
+/// account details.
+///
+/// The test expects that:
+/// - The transaction log contains three transactions with correct details.
+/// - The accounts map contains two accounts with expected balances and states.
+
+#[tokio::test]
+async fn reg_test_load_from_previous_session_csv_async() {
+    // Create temporary files for transactions and accounts
+    let mut transactions_file = NamedTempFile::new().expect("Failed to create temporary file");
+    let mut accounts_file = NamedTempFile::new().expect("Failed to create temporary file");
+
+    // Write transaction data
+    transactions_file
+        .write_all(
+            b"type,client,tx,amount\n
+                                        deposit,1,1,10.0000\n
+                                        deposit,2,2,5.0000\n
+                                        withdrawal,1,3,5.0000",
+        )
+        .unwrap();
+
+    // Write account data
+    accounts_file
+        .write_all(
+            b"client,available,held,total,locked\n
+                                   1,5.0000,0.0000,5.0000,false\n
+                                   2,5.0000,0.0000,5.0000,false",
+        )
+        .unwrap();
+
+    // Create an instance of Engine
+    let engine = Arc::new(AsyncEngine::new());
+
+    let handle = {
         tokio::spawn(async move {
-            match engine
-                .read_and_process_transactions_from_csv(input_path, BUFFER_SIZE)
+            // Load data from CSV files
+            engine
+                .load_from_previous_session_csvs(
+                    transactions_file.path().to_str().unwrap(),
+                    accounts_file.path().to_str().unwrap(),
+                )
                 .await
-            {
-                Ok(()) => panic!("Expected an error, but got success"),
-                Err(TransactionProcessingError::MultipleErrors(errors)) => {
-                    let expected_errors = vec![
-                        "Error reading transaction record: CSV deserialize error: record 1 (line: 2, byte: 22): invalid digit found in string",
-                        "Error reading transaction record: Unknown transaction type: deposi",
-                        "Error reading transaction record: Unknown transaction type: witawal",
-                        "Error processing Transaction { ty: Withdrawal, client: 1, tx: 3, amount: Some(5.0000), disputed: false }: Account not found",
-                    ];
+                .expect("Failed to load from CSV");
 
-                    // Compare the sorted errors to ensure the order doesn't matter
-                    let mut actual_errors = errors.clone();
-                    actual_errors.sort();
-                    let mut expected_errors_sorted = expected_errors;
-                    expected_errors_sorted.sort();
+            let account_guard = engine.accounts.get(2).await.unwrap();
+            let account2 = account_guard.get(&2).unwrap();
+            assert_eq!(
+                account2.total,
+                Decimal::from_str("5").unwrap(),
+                "Account 2 total should be 5"
+            );
 
-                    assert_eq!(
-                        actual_errors, expected_errors_sorted,
-                        "Errors do not match expected errors"
-                    );
-                }
-            }
-            assert_eq!(engine.accounts.len().await, 1);
+            // Check if transactions were loaded correctly
+            assert_eq!(engine.transaction_log.len().await, 3);
+
+            let tx1_guard = engine.transaction_log.get(1).await.unwrap();
+            let tx1 = tx1_guard.get(&1).unwrap();
+            assert_eq!(tx1.ty, TransactionType::Deposit);
+            assert_eq!(tx1.client, 1);
+            assert_eq!(tx1.tx, 1);
+            assert_eq!(tx1.amount, Some(Decimal::new(10_0000, 4))); // 10.0000
+
+            let tx2_guard = engine.transaction_log.get(3).await.unwrap();
+            let tx2 = tx2_guard.get(&3).unwrap();
+            assert_eq!(tx2.ty, TransactionType::Withdrawal);
+            assert_eq!(tx2.client, 1);
+            assert_eq!(tx2.tx, 3);
+            assert_eq!(tx2.amount, Some(Decimal::new(5_0000, 4))); // 5.0000
+
+            // Check if accounts were loaded correctly
+            assert_eq!(engine.accounts.len().await, 2);
+            let account_guard = engine.accounts.get(2).await.unwrap();
+            let account = account_guard.get(&2).unwrap();
+            assert_eq!(account.available, Decimal::new(5_0000, 4)); // 5.0000
+            assert_eq!(account.held, Decimal::new(0, 4)); // 0.0000
+            assert_eq!(account.total, Decimal::new(5_0000, 4)); // 5.0000
+            assert!(!account.locked);
         })
     };
+
+    //wait for completion
+    handle.await.unwrap();
 }
