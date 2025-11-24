@@ -2,9 +2,11 @@ use rust_decimal::Decimal;
 use std::str::FromStr;
 use std::sync::Arc;
 use tempfile::NamedTempFile;
+use tokio::fs::File;
 use txn_engine::{
     asyncengine::{AsycEngineFunctions, AsyncEngine},
     datastr::transaction::TransactionProcessingError,
+    utility::generate_random_transaction_concurrent_stream,
 };
 
 use std::io::Write;
@@ -1086,4 +1088,146 @@ async fn reg_test_serdesr_engine() -> Result<(), Box<dyn std::error::Error>> {
     );
 
     Ok(()) // ← important!
+}
+
+/// Test that the engine produces consistent results even when processing transactions concurrently.
+/// This test is not exhaustive in terms of transaction type coverage, but provides a reasonable
+/// level of confidence that the engine is thread-safe and can handle concurrent transaction processing.
+///
+/// The test creates two engines, `engine1` and `engine2`. It processes three files sequentially
+/// with `engine1` and concurrently with `engine2`. It then compares the account snapshots of
+/// `engine1` and `engine2` to ensure they are equal.
+///
+/// Transactions are generated in a way that every file contains a disjoint set of client IDs and tx IDs,
+/// so concurrent executions (i.e. with different transaction execution orders) won't cause different
+/// final amounts in the client accounts (if the engine manage the concurrency correctly).
+#[tokio::test]
+async fn reg_test_engine_consistency_with_concurrent_processing_async(
+) -> Result<(), Box<dyn std::error::Error>> {
+    const BUF_SIZE: usize = 1024;
+    // Generate 3 temp files with consistent random transactions
+    let temp_file1 = generate_random_transaction_concurrent_stream(10_000, 0, 1, 10).unwrap();
+    let temp_file2 =
+        generate_random_transaction_concurrent_stream(10_000, 10_001, 200, 300).unwrap();
+    let temp_file3 =
+        generate_random_transaction_concurrent_stream(10_000, 20_001, 400, 500).unwrap();
+
+    /* debug
+    let mut writer = Writer::from_writer(std::io::stdout());
+    let mut source = File::open(temp_file1.path()).unwrap();
+    let mut destination = File::create("tempfile1.csv").unwrap();
+    std::io::copy(&mut source, &mut destination).unwrap();
+    let mut source = File::open(temp_file2.path()).unwrap();
+    let mut destination = File::create("tempfile2.csv").unwrap();
+    std::io::copy(&mut source, &mut destination).unwrap();
+    let mut source = File::open(temp_file3.path()).unwrap();
+    let mut destination = File::create("tempfile3.csv").unwrap();
+    std::io::copy(&mut source, &mut destination).unwrap(); */
+
+    // Create two engines
+    let engine_seq = Arc::new(AsyncEngine::new());
+    let engine_concurrent = Arc::new(AsyncEngine::new());
+
+    // Process files sequentially with engine1
+    // === Sequential processing (reference) ===
+    // Process files sequentially with engine1
+    match engine_seq
+        .read_and_process_transactions(File::open(temp_file1.path()).await.unwrap(), BUF_SIZE)
+        .await
+    {
+        Ok(()) => {}
+        Err(..) => {}
+    }
+    match engine_seq
+        .read_and_process_transactions(File::open(temp_file2.path()).await.unwrap(), BUF_SIZE)
+        .await
+    {
+        Ok(()) => {}
+        Err(..) => {}
+    }
+    match engine_seq
+        .read_and_process_transactions(File::open(temp_file3.path()).await.unwrap(), BUF_SIZE)
+        .await
+    {
+        Ok(()) => {}
+        Err(..) => {}
+    }
+
+    // Process files concurrently with engine2
+    let handles = vec![
+        {
+            let engine_concurrent = Arc::clone(&engine_concurrent);
+            let file = File::open(temp_file1.path()).await.unwrap();
+            tokio::spawn(async move {
+                match engine_concurrent
+                    .read_and_process_transactions(file, BUF_SIZE)
+                    .await
+                {
+                    Ok(()) => {}
+                    Err(..) => {}
+                };
+            })
+        },
+        {
+            let engine_concurrent = Arc::clone(&engine_concurrent);
+            let file = File::open(temp_file2.path()).await.unwrap();
+            tokio::spawn(async move {
+                match engine_concurrent
+                    .read_and_process_transactions(file, BUF_SIZE)
+                    .await
+                {
+                    Ok(()) => {}
+                    Err(..) => {}
+                };
+            })
+        },
+        {
+            let engine_concurrent = Arc::clone(&engine_concurrent);
+            let file = File::open(temp_file3.path()).await.unwrap();
+            tokio::spawn(async move {
+                match engine_concurrent
+                    .read_and_process_transactions(file, BUF_SIZE)
+                    .await
+                {
+                    Ok(()) => {}
+                    Err(..) => {}
+                };
+            })
+        },
+    ];
+
+    // Wait for all threads to complete
+    for handle in handles {
+        handle.await.unwrap();
+    }
+
+    /*  debug
+    writer.write_record(["client", "available", "held", "total", "locked"]).unwrap();
+    writer.flush().unwrap();
+    let _ = serialize_account_balances_csv(&engine1.accounts, std::io::stdout());
+    writer.write_record(["client", "available", "held", "total", "locked"]).unwrap();
+    writer.flush().unwrap();
+    let _ = serialize_account_balances_csv(&engine2.accounts, std::io::stdout()); */
+
+    let mut accounts_seq = Vec::new();
+    let mut iter = engine_seq.accounts.iter().await;
+    while let Some((id, guard)) = iter.next().await {
+        if let Some(acc) = guard.get(&id) {
+            accounts_seq.push((id, acc.clone()));
+        }
+    }
+
+    let mut accounts_concurrent = Vec::new();
+    let mut iter = engine_concurrent.accounts.iter().await;
+    while let Some((id, guard)) = iter.next().await {
+        if let Some(acc) = guard.get(&id) {
+            accounts_concurrent.push((id, acc.clone()));
+        }
+    }
+
+    accounts_seq.sort_by_key(|(id, _)| *id);
+    accounts_seq.sort_by_key(|(id, _)| *id);
+    assert_eq!(accounts_seq, accounts_seq, "Account states differ");
+
+    Ok(())
 }
