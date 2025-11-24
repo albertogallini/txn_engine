@@ -976,3 +976,114 @@ async fn reg_test_load_from_previous_session_csv_async() {
     //wait for completion
     handle.await.unwrap();
 }
+
+/// Tests serialization and deserialization of the `Engine` to and from CSV files.
+///
+/// This test creates a temporary file for transactions and accounts,
+/// writes predefined data into them, and then loads this data into an
+/// `Engine` instance using the `load_from_previous_session_csvs` method.
+///
+/// It then dumps the `Engine` state to a temporary file using the
+/// `dump_transaction_log_to_csvs` method and loads the data from the
+/// temporary file into another `Engine` instance.
+///
+/// It verifies that the transactions and accounts are correctly loaded by
+/// asserting the number of entries and checking specific transaction and
+/// account details.
+#[tokio::test]
+async fn reg_test_serdesr_engine() -> Result<(), Box<dyn std::error::Error>> {
+    use tempfile::NamedTempFile;
+    use tokio::fs;
+
+    let engine = Arc::new(AsyncEngine::new());
+    let input_path = "tests/transactions_mixed.csv";
+
+    match engine
+        .read_and_process_transactions_from_csv(input_path, BUFFER_SIZE)
+        .await
+    {
+        Ok(()) => println!("Transactions processed successfully"),
+        Err(e) => println!("Some error occurred while processing transactions: {}", e),
+    }
+
+    assert_eq!(engine.accounts.len().await, 4, "Expected four accounts");
+
+    // === Dump transaction log ===
+    let transactions_file = NamedTempFile::new()?;
+    engine
+        .dump_transaction_log_to_csv(transactions_file.path().to_str().unwrap(), BUFFER_SIZE)
+        .await?;
+
+    // === Dump accounts ===
+    let accounts_file = NamedTempFile::new()?;
+    let tokio_file = fs::File::create(accounts_file.path()).await?; // now ? works!
+    engine.dump_account_to_csv(tokio_file, BUFFER_SIZE).await?;
+
+    let engine2 = Arc::new(AsyncEngine::new());
+
+    // Deserialize transactions from temp file into engine2
+    match engine2
+        .load_from_previous_session_csvs(
+            transactions_file.path().to_str().unwrap(),
+            accounts_file.path().to_str().unwrap(),
+        )
+        .await
+    {
+        Ok(()) => {}
+        Err(e) => println!(
+            "Some error occurred loading the engine from previous dump: {}",
+            e
+        ),
+    }
+
+    let mut original_stream = engine.accounts.iter().await;
+    let mut loaded_stream = engine2.accounts.iter().await;
+
+    let mut original_vec = vec![];
+    let mut loaded_vec = vec![];
+
+    while let Some((id, guard)) = original_stream.next().await {
+        if let Some(acc) = guard.get(&id) {
+            original_vec.push((id, acc.clone()));
+        }
+    }
+    while let Some((id, guard)) = loaded_stream.next().await {
+        if let Some(acc) = guard.get(&id) {
+            loaded_vec.push((id, acc.clone()));
+        }
+    }
+
+    original_vec.sort_by_key(|(id, _)| *id);
+    loaded_vec.sort_by_key(|(id, _)| *id);
+
+    assert_eq!(
+        original_vec, loaded_vec,
+        "Accounts do not match after round-trip"
+    );
+
+    let mut original_txs: Vec<_> = vec![];
+    let mut original_tx_iter = engine.transaction_log.iter().await;
+    while let Some((tx_id, guard)) = original_tx_iter.next().await {
+        if let Some(tx) = guard.get(&tx_id) {
+            original_txs.push((tx_id, tx.clone()));
+        }
+    }
+
+    let mut loaded_txs: Vec<_> = vec![];
+    let mut loaded_tx_iter = engine2.transaction_log.iter().await;
+    while let Some((tx_id, guard)) = loaded_tx_iter.next().await {
+        if let Some(tx) = guard.get(&tx_id) {
+            loaded_txs.push((tx_id, tx.clone()));
+        }
+    }
+
+    original_txs.sort_by_key(|(id, _)| *id);
+    loaded_txs.sort_by_key(|(id, _)| *id);
+
+    assert_eq!(
+        original_txs, loaded_txs,
+        "Transaction logs do not match after round-trip"
+    );
+
+    Ok(()) // ← important!
+}

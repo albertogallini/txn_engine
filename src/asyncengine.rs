@@ -17,8 +17,6 @@ use tokio::fs::File;
 use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt, BufReader, BufWriter};
 use tokio::sync::RwLockWriteGuard;
 
-use tokio_util::compat::TokioAsyncWriteCompatExt;
-
 // Reuse the same errors
 pub use crate::engine::{EngineError, EngineSerDeserError};
 
@@ -52,7 +50,7 @@ pub trait AsycEngineFunctions {
         transactions_file: &str,
         accounts_file: &str,
     ) -> Result<(), AsycEngineSerDeserError>;
-    async fn dump_account_to_csv<W: AsyncWriteExt + Unpin + futures_util::AsyncWrite>(
+    async fn dump_account_to_csv<W: AsyncWriteExt + Unpin + AsyncWrite>(
         &self,
         writer: W,
         buffer_size: usize,
@@ -269,15 +267,14 @@ impl AsycEngineFunctions for AsyncEngine {
         Ok(())
     }
 
-    async fn dump_account_to_csv<W: AsyncWrite + Unpin + futures_util::AsyncWrite>(
+    async fn dump_account_to_csv<W: AsyncWrite + Unpin + AsyncWrite>(
         &self,
         writer: W,
         buffer_size: usize,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        let compat_writer = writer.compat_write();
         let mut csv_writer = AsyncWriterBuilder::new()
             .buffer_capacity(buffer_size)
-            .create_serializer(compat_writer);
+            .create_serializer(writer);
 
         // Write header
         csv_writer
