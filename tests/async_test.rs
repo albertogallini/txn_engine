@@ -22,53 +22,43 @@ async fn unit_test_deposit_and_withdrawal_async() {
     let input_path = temp_file.path().to_str().unwrap().to_owned();
     let engine = Arc::new(AsyncEngine::default());
 
-    let handle = {
-        //no need to use it afterward -- let engine = Arc::clone(&engine);
-        let input_path = input_path.clone();
+    engine
+        .read_and_process_transactions_from_csv(&input_path, BUFFER_SIZE)
+        .await
+        .expect("CSV processing should succeed");
 
-        tokio::spawn(async move {
-            engine
-                .read_and_process_transactions_from_csv(&input_path, BUFFER_SIZE)
-                .await
-                .expect("CSV processing should succeed");
+    // Assertions
+    assert_eq!(
+        engine.accounts.len().await,
+        1,
+        "There should be one account"
+    );
+    assert_eq!(
+        engine.transaction_log.len().await,
+        2,
+        "Two transactions processed"
+    );
 
-            // Assertions
-            assert_eq!(
-                engine.accounts.len().await,
-                1,
-                "There should be one account"
-            );
-            assert_eq!(
-                engine.transaction_log.len().await,
-                2,
-                "Two transactions processed"
-            );
+    let account_guard = engine.accounts.get(1).await.unwrap();
+    let account = account_guard.get(&1).unwrap();
 
-            let account_guard = engine.accounts.get(1).await.unwrap();
-            let account = account_guard.get(&1).unwrap();
+    assert_eq!(
+        account.total,
+        Decimal::from_str("5.0001").unwrap(),
+        "Total should be 5 after deposit and withdrawal"
+    );
+    assert_eq!(
+        account.available,
+        Decimal::from_str("5.0001").unwrap(),
+        "Available should match total since no disputes"
+    );
+    assert_eq!(
+        account.held,
+        Decimal::from_str("0.0000").unwrap(),
+        "Held should be 0"
+    );
 
-            assert_eq!(
-                account.total,
-                Decimal::from_str("5.0001").unwrap(),
-                "Total should be 5 after deposit and withdrawal"
-            );
-            assert_eq!(
-                account.available,
-                Decimal::from_str("5.0001").unwrap(),
-                "Available should match total since no disputes"
-            );
-            assert_eq!(
-                account.held,
-                Decimal::from_str("0.0000").unwrap(),
-                "Held should be 0"
-            );
-
-            assert!(!account.locked);
-        })
-    };
-
-    //wait for completion
-    handle.await.unwrap();
+    assert!(!account.locked);
 }
 
 #[tokio::test]
@@ -81,53 +71,43 @@ async fn unit_test_deposit_and_dispute_async() {
     let input_path = temp_file.path().to_str().unwrap().to_owned();
     let engine = Arc::new(AsyncEngine::default());
 
-    let handle = {
-        //no need to use it afterward -- let engine = Arc::clone(&engine);
-        //no need to use it afterward -- let input_path = input_path.clone();
+    engine
+        .read_and_process_transactions_from_csv(&input_path, BUFFER_SIZE)
+        .await
+        .expect("CSV processing should succeed");
 
-        tokio::spawn(async move {
-            engine
-                .read_and_process_transactions_from_csv(&input_path, BUFFER_SIZE)
-                .await
-                .expect("CSV processing should succeed");
+    // Assertions
+    assert_eq!(
+        engine.accounts.len().await,
+        1,
+        "There should be one account"
+    );
+    assert_eq!(
+        engine.transaction_log.len().await,
+        1,
+        "One transactions processed"
+    );
 
-            // Assertions
-            assert_eq!(
-                engine.accounts.len().await,
-                1,
-                "There should be one account"
-            );
-            assert_eq!(
-                engine.transaction_log.len().await,
-                1,
-                "One transactions processed"
-            );
+    let account_guard = engine.accounts.get(1).await.unwrap();
+    let account = account_guard.get(&1).unwrap();
 
-            let account_guard = engine.accounts.get(1).await.unwrap();
-            let account = account_guard.get(&1).unwrap();
+    assert_eq!(
+        account.total,
+        Decimal::from_str("10.0000").unwrap(),
+        "Total should remain 10 after dispute"
+    );
+    assert_eq!(
+        account.available,
+        Decimal::from_str("0.0000").unwrap(),
+        "Available should be 0 after dispute"
+    );
+    assert_eq!(
+        account.held,
+        Decimal::from_str("10.0000").unwrap(),
+        "Held should be 10 after dispute"
+    );
 
-            assert_eq!(
-                account.total,
-                Decimal::from_str("10.0000").unwrap(),
-                "Total should remain 10 after dispute"
-            );
-            assert_eq!(
-                account.available,
-                Decimal::from_str("0.0000").unwrap(),
-                "Available should be 0 after dispute"
-            );
-            assert_eq!(
-                account.held,
-                Decimal::from_str("10.0000").unwrap(),
-                "Held should be 10 after dispute"
-            );
-
-            assert!(!account.locked);
-        })
-    };
-
-    //wait for completion
-    handle.await.unwrap();
+    assert!(!account.locked);
 }
 
 #[tokio::test]
@@ -143,45 +123,37 @@ async fn unit_test_dispute_deposit_after_withdrawal_async() {
     let input_path = temp_file.path().to_str().unwrap().to_owned();
     let engine = Arc::new(AsyncEngine::default());
 
-    let handle = {
-        //no need to use it afterward -- let engine = Arc::clone(&engine);
-        //no need to use it afterward -- let input_path = input_path.clone();
-        tokio::spawn(async move {
-            engine
-                .read_and_process_transactions_from_csv(&input_path, BUFFER_SIZE)
-                .await
-                .expect("CSV processing should succeed");
+    engine
+        .read_and_process_transactions_from_csv(&input_path, BUFFER_SIZE)
+        .await
+        .expect("CSV processing should succeed");
 
-            assert_eq!(
-                engine.accounts.len().await,
-                1,
-                "Account should exist even if zero balance"
-            );
+    assert_eq!(
+        engine.accounts.len().await,
+        1,
+        "Account should exist even if zero balance"
+    );
 
-            let account_guard = engine.accounts.get(1).await.unwrap();
-            let account = account_guard.get(&1).unwrap();
+    let account_guard = engine.accounts.get(1).await.unwrap();
+    let account = account_guard.get(&1).unwrap();
 
-            assert_eq!(
-                account.total,
-                Decimal::from_str("10.0000").unwrap(),
-                "Total should be 10 after failed withdrawal"
-            );
-            assert_eq!(
-                account.available,
-                Decimal::from_str("-10.0000").unwrap(),
-                "Available should be -10 after failed withdrawal and dispute"
-            );
-            assert_eq!(
-                account.held,
-                Decimal::from_str("20.0000").unwrap(),
-                "Held should be 20 after dispute"
-            );
+    assert_eq!(
+        account.total,
+        Decimal::from_str("10.0000").unwrap(),
+        "Total should be 10 after failed withdrawal"
+    );
+    assert_eq!(
+        account.available,
+        Decimal::from_str("-10.0000").unwrap(),
+        "Available should be -10 after failed withdrawal and dispute"
+    );
+    assert_eq!(
+        account.held,
+        Decimal::from_str("20.0000").unwrap(),
+        "Held should be 20 after dispute"
+    );
 
-            assert!(!account.locked);
-        })
-    };
-    //wait for completion
-    handle.await.unwrap();
+    assert!(!account.locked);
 }
 
 #[tokio::test]
@@ -198,44 +170,35 @@ async fn unit_test_double_dispute_async() {
     let input_path = temp_file.path().to_str().unwrap().to_owned();
     let engine = Arc::new(AsyncEngine::default());
 
-    let handle = {
-        //no need to use it afterward -- let engine = Arc::clone(&engine);
-        //no need to use it afterward -- let input_path = input_path.clone();
+    engine
+        .read_and_process_transactions_from_csv(&input_path, BUFFER_SIZE)
+        .await
+        .expect("CSV processing should succeed");
 
-        tokio::spawn(async move {
-            engine
-                .read_and_process_transactions_from_csv(&input_path, BUFFER_SIZE)
-                .await
-                .expect("CSV processing should succeed");
+    assert_eq!(
+        engine.accounts.len().await,
+        1,
+        "There should be one account"
+    );
 
-            assert_eq!(
-                engine.accounts.len().await,
-                1,
-                "There should be one account"
-            );
+    let account_guard = engine.accounts.get(1).await.unwrap();
+    let account = account_guard.get(&1).unwrap();
 
-            let account_guard = engine.accounts.get(1).await.unwrap();
-            let account = account_guard.get(&1).unwrap();
-
-            assert_eq!(
-                account.total,
-                Decimal::from_str("25.0000").unwrap(),
-                "Total should remain 25 after dispute"
-            );
-            assert_eq!(
-                account.available,
-                Decimal::from_str("10.0000").unwrap(),
-                "Available should be 10 after dispute"
-            );
-            assert_eq!(
-                account.held,
-                Decimal::from_str("15.0000").unwrap(),
-                "Held should be 15 after dispute"
-            );
-        })
-    };
-
-    handle.await.unwrap();
+    assert_eq!(
+        account.total,
+        Decimal::from_str("25.0000").unwrap(),
+        "Total should remain 25 after dispute"
+    );
+    assert_eq!(
+        account.available,
+        Decimal::from_str("10.0000").unwrap(),
+        "Available should be 10 after dispute"
+    );
+    assert_eq!(
+        account.held,
+        Decimal::from_str("15.0000").unwrap(),
+        "Held should be 15 after dispute"
+    );
 }
 
 #[tokio::test]
@@ -252,50 +215,41 @@ async fn unit_test_txid_reused_after_dispute_and_resolve_async() {
     let input_path = temp_file.path().to_str().unwrap().to_owned();
     let engine = Arc::new(AsyncEngine::default());
 
-    let handle = {
-        //no need to use it afterward -- let engine = Arc::clone(&engine);
-        //no need to use it afterward -- let input_path = input_path.clone();
+    let result = engine
+        .read_and_process_transactions_from_csv(&input_path, BUFFER_SIZE)
+        .await;
 
-        tokio::spawn(async move {
-            let result = engine
-                .read_and_process_transactions_from_csv(&input_path, BUFFER_SIZE)
-                .await;
+    assert!(result.is_err());
+    let err = result.unwrap_err();
+    assert!(
+        err.to_string().contains("{ ty: Deposit, client: 1, tx: 2, amount: Some(20.0000), disputed: false }: Transaction id already processed in this session - cannot be repeated"),
+        "Expected `ty: Deposit, client: 1, tx: 2, amount: Some(20.0000), disputed: false : Transaction id already processed in this session - cannot be repeated` error"
+    );
 
-            assert!(result.is_err());
-            let err = result.unwrap_err();
-            assert!(
-                err.to_string().contains("{ ty: Deposit, client: 1, tx: 2, amount: Some(20.0000), disputed: false }: Transaction id already processed in this session - cannot be repeated"),
-                "Expected `ty: Deposit, client: 1, tx: 2, amount: Some(20.0000), disputed: false : Transaction id already processed in this session - cannot be repeated` error"
-            );
+    assert_eq!(
+        engine.accounts.len().await,
+        1,
+        "Account should exist even if zero balance"
+    );
 
-            assert_eq!(
-                engine.accounts.len().await,
-                1,
-                "Account should exist even if zero balance"
-            );
+    let account_guard = engine.accounts.get(1).await.unwrap();
+    let account = account_guard.get(&1).unwrap();
 
-            let account_guard = engine.accounts.get(1).await.unwrap();
-            let account = account_guard.get(&1).unwrap();
-
-            assert_eq!(
-                account.total,
-                Decimal::from_str("30.0000").unwrap(),
-                "Total should be 30"
-            );
-            assert_eq!(
-                account.available,
-                Decimal::from_str("30.0000").unwrap(),
-                "Available should be 30"
-            );
-            assert_eq!(
-                account.held,
-                Decimal::from_str("0.0000").unwrap(),
-                "Held should be 0"
-            );
-        })
-    };
-
-    handle.await.unwrap();
+    assert_eq!(
+        account.total,
+        Decimal::from_str("30.0000").unwrap(),
+        "Total should be 30"
+    );
+    assert_eq!(
+        account.available,
+        Decimal::from_str("30.0000").unwrap(),
+        "Available should be 30"
+    );
+    assert_eq!(
+        account.held,
+        Decimal::from_str("0.0000").unwrap(),
+        "Held should be 0"
+    );
 }
 
 #[tokio::test]
@@ -310,44 +264,35 @@ async fn unit_test_deposit_and_dispute_resolve_async() {
     let input_path = temp_file.path().to_str().unwrap().to_owned();
     let engine = Arc::new(AsyncEngine::default());
 
-    let handle = {
-        //no need to use it afterward -- let engine = Arc::clone(&engine);
-        //no need to use it afterward -- let input_path = input_path.clone();
+    engine
+        .read_and_process_transactions_from_csv(&input_path, BUFFER_SIZE)
+        .await
+        .expect("CSV processing should succeed");
 
-        tokio::spawn(async move {
-            engine
-                .read_and_process_transactions_from_csv(&input_path, BUFFER_SIZE)
-                .await
-                .expect("CSV processing should succeed");
+    assert_eq!(
+        engine.accounts.len().await,
+        1,
+        "There should be one account"
+    );
 
-            assert_eq!(
-                engine.accounts.len().await,
-                1,
-                "There should be one account"
-            );
+    let account_guard = engine.accounts.get(1).await.unwrap();
+    let account = account_guard.get(&1).unwrap();
 
-            let account_guard = engine.accounts.get(1).await.unwrap();
-            let account = account_guard.get(&1).unwrap();
-
-            assert_eq!(
-                account.total,
-                Decimal::from_str("10.0000").unwrap(),
-                "Total should remain 10 after dispute"
-            );
-            assert_eq!(
-                account.available,
-                Decimal::from_str("10.0000").unwrap(),
-                "Available should be 10 after resolve"
-            );
-            assert_eq!(
-                account.held,
-                Decimal::from_str("0.0000").unwrap(),
-                "Held should be 0 after resolve"
-            );
-        })
-    };
-
-    handle.await.unwrap();
+    assert_eq!(
+        account.total,
+        Decimal::from_str("10.0000").unwrap(),
+        "Total should remain 10 after dispute"
+    );
+    assert_eq!(
+        account.available,
+        Decimal::from_str("10.0000").unwrap(),
+        "Available should be 10 after resolve"
+    );
+    assert_eq!(
+        account.held,
+        Decimal::from_str("0.0000").unwrap(),
+        "Held should be 0 after resolve"
+    );
 }
 
 #[tokio::test]
@@ -362,45 +307,36 @@ async fn unit_test_deposit_and_dispute_chargeback_async() {
     let input_path = temp_file.path().to_str().unwrap().to_owned();
     let engine = Arc::new(AsyncEngine::default());
 
-    let handle = {
-        //no need to use it afterward -- let engine = Arc::clone(&engine);
-        //no need to use it afterward -- let input_path = input_path.clone();
+    engine
+        .read_and_process_transactions_from_csv(&input_path, BUFFER_SIZE)
+        .await
+        .expect("CSV processing should succeed");
 
-        tokio::spawn(async move {
-            engine
-                .read_and_process_transactions_from_csv(&input_path, BUFFER_SIZE)
-                .await
-                .expect("CSV processing should succeed");
+    assert_eq!(
+        engine.accounts.len().await,
+        1,
+        "There should be one account"
+    );
 
-            assert_eq!(
-                engine.accounts.len().await,
-                1,
-                "There should be one account"
-            );
+    let account_guard = engine.accounts.get(1).await.unwrap();
+    let account = account_guard.get(&1).unwrap();
 
-            let account_guard = engine.accounts.get(1).await.unwrap();
-            let account = account_guard.get(&1).unwrap();
-
-            assert_eq!(
-                account.total,
-                Decimal::from_str("0.0000").unwrap(),
-                "Total should be 0 after chargeback"
-            );
-            assert_eq!(
-                account.available,
-                Decimal::from_str("0.0000").unwrap(),
-                "Available should be 0 after chargeback"
-            );
-            assert_eq!(
-                account.held,
-                Decimal::from_str("0.0000").unwrap(),
-                "Held should be 0 after chargeback"
-            );
-            assert!(account.locked, "Account must be locked after chargeback");
-        })
-    };
-
-    handle.await.unwrap();
+    assert_eq!(
+        account.total,
+        Decimal::from_str("0.0000").unwrap(),
+        "Total should be 0 after chargeback"
+    );
+    assert_eq!(
+        account.available,
+        Decimal::from_str("0.0000").unwrap(),
+        "Available should be 0 after chargeback"
+    );
+    assert_eq!(
+        account.held,
+        Decimal::from_str("0.0000").unwrap(),
+        "Held should be 0 after chargeback"
+    );
+    assert!(account.locked, "Account must be locked after chargeback");
 }
 
 #[tokio::test]
@@ -415,44 +351,35 @@ async fn unit_test_deposit_withdrawal_dispute_withdrawal_async() {
     let input_path = temp_file.path().to_str().unwrap().to_owned();
     let engine = Arc::new(AsyncEngine::default());
 
-    let handle = {
-        //no need to use it afterward -- let engine = Arc::clone(&engine);
-        //no need to use it afterward -- let input_path = input_path.clone();
+    engine
+        .read_and_process_transactions_from_csv(&input_path, BUFFER_SIZE)
+        .await
+        .expect("CSV processing should succeed");
 
-        tokio::spawn(async move {
-            engine
-                .read_and_process_transactions_from_csv(&input_path, BUFFER_SIZE)
-                .await
-                .expect("CSV processing should succeed");
+    assert_eq!(
+        engine.accounts.len().await,
+        1,
+        "There should be one account"
+    );
 
-            assert_eq!(
-                engine.accounts.len().await,
-                1,
-                "There should be one account"
-            );
+    let account_guard = engine.accounts.get(1).await.unwrap();
+    let account = account_guard.get(&1).unwrap();
 
-            let account_guard = engine.accounts.get(1).await.unwrap();
-            let account = account_guard.get(&1).unwrap();
-
-            assert_eq!(
-                account.total,
-                Decimal::from_str("5.0000").unwrap(),
-                "Total should be 5 after transactions"
-            );
-            assert_eq!(
-                account.available,
-                Decimal::from_str("10.0000").unwrap(),
-                "Available should reflect disputed withdrawal"
-            );
-            assert_eq!(
-                account.held,
-                Decimal::from_str("-5.0000").unwrap(),
-                "Held should be -5 for disputed withdrawal"
-            );
-        })
-    };
-
-    handle.await.unwrap();
+    assert_eq!(
+        account.total,
+        Decimal::from_str("5.0000").unwrap(),
+        "Total should be 5 after transactions"
+    );
+    assert_eq!(
+        account.available,
+        Decimal::from_str("10.0000").unwrap(),
+        "Available should reflect disputed withdrawal"
+    );
+    assert_eq!(
+        account.held,
+        Decimal::from_str("-5.0000").unwrap(),
+        "Held should be -5 for disputed withdrawal"
+    );
 }
 
 #[tokio::test]
@@ -466,50 +393,41 @@ async fn unit_test_deposit_withdrawal_too_much_async() {
     let input_path = temp_file.path().to_str().unwrap().to_owned();
     let engine = Arc::new(AsyncEngine::default());
 
-    let handle = {
-        //no need to use it afterward -- let engine = Arc::clone(&engine);
-        //no need to use it afterward -- let input_path = input_path.clone();
+    let result = engine
+        .read_and_process_transactions_from_csv(&input_path, BUFFER_SIZE)
+        .await;
 
-        tokio::spawn(async move {
-            let result = engine
-                .read_and_process_transactions_from_csv(&input_path, BUFFER_SIZE)
-                .await;
+    assert!(result.is_err());
+    let err = result.unwrap_err();
+    assert!(
+        err.to_string().contains("Insufficient funds"),
+        "Expected `Insufficient funds` error"
+    );
 
-            assert!(result.is_err());
-            let err = result.unwrap_err();
-            assert!(
-                err.to_string().contains("Insufficient funds"),
-                "Expected `Insufficient funds` error"
-            );
+    assert_eq!(
+        engine.accounts.len().await,
+        1,
+        "There should be one account"
+    );
 
-            assert_eq!(
-                engine.accounts.len().await,
-                1,
-                "There should be one account"
-            );
+    let account_guard = engine.accounts.get(1).await.unwrap();
+    let account = account_guard.get(&1).unwrap();
 
-            let account_guard = engine.accounts.get(1).await.unwrap();
-            let account = account_guard.get(&1).unwrap();
-
-            assert_eq!(
-                account.total,
-                Decimal::from_str("10.0000").unwrap(),
-                "Total should remain 10 after failed withdrawal"
-            );
-            assert_eq!(
-                account.available,
-                Decimal::from_str("10.0000").unwrap(),
-                "Available should remain 10 after failed withdrawal"
-            );
-            assert_eq!(
-                account.held,
-                Decimal::from_str("0.0000").unwrap(),
-                "Held should be 0"
-            );
-        })
-    };
-
-    handle.await.unwrap();
+    assert_eq!(
+        account.total,
+        Decimal::from_str("10.0000").unwrap(),
+        "Total should remain 10 after failed withdrawal"
+    );
+    assert_eq!(
+        account.available,
+        Decimal::from_str("10.0000").unwrap(),
+        "Available should remain 10 after failed withdrawal"
+    );
+    assert_eq!(
+        account.held,
+        Decimal::from_str("0.0000").unwrap(),
+        "Held should be 0"
+    );
 }
 
 #[tokio::test]
@@ -523,51 +441,42 @@ async fn unit_test_deposit_negative_async() {
     let input_path = temp_file.path().to_str().unwrap().to_owned();
     let engine = Arc::new(AsyncEngine::default());
 
-    let handle = {
-        //no need to use it afterward -- let engine = Arc::clone(&engine);
-        //no need to use it afterward -- let input_path = input_path.clone();
+    let result = engine
+        .read_and_process_transactions_from_csv(&input_path, BUFFER_SIZE)
+        .await;
 
-        tokio::spawn(async move {
-            let result = engine
-                .read_and_process_transactions_from_csv(&input_path, BUFFER_SIZE)
-                .await;
+    assert!(result.is_err());
+    let err = result.unwrap_err();
+    assert!(
+        err.to_string()
+            .contains("Deposit amount must be greater than 0"),
+        "Expected `Deposit amount must be greater than 0` error."
+    );
 
-            assert!(result.is_err());
-            let err = result.unwrap_err();
-            assert!(
-                err.to_string()
-                    .contains("Deposit amount must be greater than 0"),
-                "Expected `Deposit amount must be greater than 0` error."
-            );
+    assert_eq!(
+        engine.accounts.len().await,
+        1,
+        "There should be one account"
+    );
 
-            assert_eq!(
-                engine.accounts.len().await,
-                1,
-                "There should be one account"
-            );
+    let account_guard = engine.accounts.get(1).await.unwrap();
+    let account = account_guard.get(&1).unwrap();
 
-            let account_guard = engine.accounts.get(1).await.unwrap();
-            let account = account_guard.get(&1).unwrap();
-
-            assert_eq!(
-                account.total,
-                Decimal::from_str("10.0000").unwrap(),
-                "Total should remain 10"
-            );
-            assert_eq!(
-                account.available,
-                Decimal::from_str("10.0000").unwrap(),
-                "Available should remain 10"
-            );
-            assert_eq!(
-                account.held,
-                Decimal::from_str("0.0000").unwrap(),
-                "Held should be 0"
-            );
-        })
-    };
-
-    handle.await.unwrap();
+    assert_eq!(
+        account.total,
+        Decimal::from_str("10.0000").unwrap(),
+        "Total should remain 10"
+    );
+    assert_eq!(
+        account.available,
+        Decimal::from_str("10.0000").unwrap(),
+        "Available should remain 10"
+    );
+    assert_eq!(
+        account.held,
+        Decimal::from_str("0.0000").unwrap(),
+        "Held should be 0"
+    );
 }
 
 #[tokio::test]
@@ -581,51 +490,42 @@ async fn unit_test_withdrawal_negative_async() {
     let input_path = temp_file.path().to_str().unwrap().to_owned();
     let engine = Arc::new(AsyncEngine::default());
 
-    let handle = {
-        //no need to use it afterward -- let engine = Arc::clone(&engine);
-        //no need to use it afterward -- let input_path = input_path.clone();
+    let result = engine
+        .read_and_process_transactions_from_csv(&input_path, BUFFER_SIZE)
+        .await;
 
-        tokio::spawn(async move {
-            let result = engine
-                .read_and_process_transactions_from_csv(&input_path, BUFFER_SIZE)
-                .await;
+    assert!(result.is_err());
+    let err = result.unwrap_err();
+    assert!(
+        err.to_string()
+            .contains("Withdrawal amount must be greater than 0"),
+        "Expected `Withdrawal amount must be greater than 0` error."
+    );
 
-            assert!(result.is_err());
-            let err = result.unwrap_err();
-            assert!(
-                err.to_string()
-                    .contains("Withdrawal amount must be greater than 0"),
-                "Expected `Withdrawal amount must be greater than 0` error."
-            );
+    assert_eq!(
+        engine.accounts.len().await,
+        1,
+        "There should be one account"
+    );
 
-            assert_eq!(
-                engine.accounts.len().await,
-                1,
-                "There should be one account"
-            );
+    let account_guard = engine.accounts.get(1).await.unwrap();
+    let account = account_guard.get(&1).unwrap();
 
-            let account_guard = engine.accounts.get(1).await.unwrap();
-            let account = account_guard.get(&1).unwrap();
-
-            assert_eq!(
-                account.total,
-                Decimal::from_str("10.0000").unwrap(),
-                "Total should remain 10"
-            );
-            assert_eq!(
-                account.available,
-                Decimal::from_str("10.0000").unwrap(),
-                "Available should remain 10"
-            );
-            assert_eq!(
-                account.held,
-                Decimal::from_str("0.0000").unwrap(),
-                "Held should be 0"
-            );
-        })
-    };
-
-    handle.await.unwrap();
+    assert_eq!(
+        account.total,
+        Decimal::from_str("10.0000").unwrap(),
+        "Total should remain 10"
+    );
+    assert_eq!(
+        account.available,
+        Decimal::from_str("10.0000").unwrap(),
+        "Available should remain 10"
+    );
+    assert_eq!(
+        account.held,
+        Decimal::from_str("0.0000").unwrap(),
+        "Held should be 0"
+    );
 }
 
 #[tokio::test]
@@ -639,50 +539,41 @@ async fn unit_test_withdrawal_from_zero_async() {
     let input_path = temp_file.path().to_str().unwrap().to_owned();
     let engine = Arc::new(AsyncEngine::default());
 
-    let handle = {
-        //no need to use it afterward -- let engine = Arc::clone(&engine);
-        //no need to use it afterward -- let input_path = input_path.clone();
+    let result = engine
+        .read_and_process_transactions_from_csv(&input_path, BUFFER_SIZE)
+        .await;
 
-        tokio::spawn(async move {
-            let result = engine
-                .read_and_process_transactions_from_csv(&input_path, BUFFER_SIZE)
-                .await;
+    assert!(result.is_err());
+    let err = result.unwrap_err();
+    assert!(
+        err.to_string().contains("Insufficient funds"),
+        "Expected insufficient funds error"
+    );
 
-            assert!(result.is_err());
-            let err = result.unwrap_err();
-            assert!(
-                err.to_string().contains("Insufficient funds"),
-                "Expected insufficient funds error"
-            );
+    assert_eq!(
+        engine.accounts.len().await,
+        1,
+        "Account should exist even if zero balance"
+    );
 
-            assert_eq!(
-                engine.accounts.len().await,
-                1,
-                "Account should exist even if zero balance"
-            );
+    let account_guard = engine.accounts.get(1).await.unwrap();
+    let account = account_guard.get(&1).unwrap();
 
-            let account_guard = engine.accounts.get(1).await.unwrap();
-            let account = account_guard.get(&1).unwrap();
-
-            assert_eq!(
-                account.total,
-                Decimal::from_str("10.0000").unwrap(),
-                "Total should remain 10 after failed withdrawal attempt"
-            );
-            assert_eq!(
-                account.available,
-                Decimal::from_str("10.0000").unwrap(),
-                "Available should remain 10 after failed withdrawal attempt"
-            );
-            assert_eq!(
-                account.held,
-                Decimal::from_str("0.0000").unwrap(),
-                "Held should be 0"
-            );
-        })
-    };
-
-    handle.await.unwrap();
+    assert_eq!(
+        account.total,
+        Decimal::from_str("10.0000").unwrap(),
+        "Total should remain 10 after failed withdrawal attempt"
+    );
+    assert_eq!(
+        account.available,
+        Decimal::from_str("10.0000").unwrap(),
+        "Available should remain 10 after failed withdrawal attempt"
+    );
+    assert_eq!(
+        account.held,
+        Decimal::from_str("0.0000").unwrap(),
+        "Held should be 0"
+    );
 }
 
 #[tokio::test]
@@ -701,34 +592,25 @@ async fn unit_test_addition_overflow_async() {
     let input_path = temp_file.path().to_str().unwrap().to_owned();
     let engine = Arc::new(AsyncEngine::default());
 
-    let handle = {
-        //no need to use it afterward -- let engine = Arc::clone(&engine);
-        //no need to use it afterward -- let input_path = input_path.clone();
+    let result = engine
+        .read_and_process_transactions_from_csv(&input_path, BUFFER_SIZE)
+        .await;
 
-        tokio::spawn(async move {
-            let result = engine
-                .read_and_process_transactions_from_csv(&input_path, BUFFER_SIZE)
-                .await;
+    assert!(
+        result.is_err(),
+        "Processing should fail due to addition overflow"
+    );
+    let err = result.unwrap_err();
+    assert!(
+        err.to_string().contains("Addition overflow"),
+        "Expected `Addition overflow` error"
+    );
 
-            assert!(
-                result.is_err(),
-                "Processing should fail due to addition overflow"
-            );
-            let err = result.unwrap_err();
-            assert!(
-                err.to_string().contains("Addition overflow"),
-                "Expected `Addition overflow` error"
-            );
-
-            assert_eq!(
-                engine.accounts.len().await,
-                1,
-                "There should be one account"
-            );
-        })
-    };
-
-    handle.await.unwrap();
+    assert_eq!(
+        engine.accounts.len().await,
+        1,
+        "There should be one account"
+    );
 }
 
 #[tokio::test]
@@ -750,57 +632,43 @@ async fn unit_test_decimal_precision_async() {
     let input_path = temp_file.path().to_str().unwrap().to_owned();
     let engine = Arc::new(AsyncEngine::default());
 
-    let handle = {
-        //no need to use it afterward -- let engine = Arc::clone(&engine);
-        //no need to use it afterward -- let input_path = input_path.clone();
+    let result = engine
+        .read_and_process_transactions_from_csv(&input_path, BUFFER_SIZE)
+        .await;
 
-        tokio::spawn(async move {
-            let result = engine
-                .read_and_process_transactions_from_csv(&input_path, BUFFER_SIZE)
-                .await;
+    assert!(result.is_err());
+    let err = result.unwrap_err();
+    assert!(
+        err.to_string()
+            .contains("Withdrawal amount must be greater than 0"),
+        "Expected withdrawal of zero (after rounding) to be rejected"
+    );
 
-            // Note: This test originally expected failure on tiny withdrawals, but in correct engine logic,
-            // 0.000045 and 0.0000045 should round to 0.0000 → withdrawal of 0 is rejected.
-            // So we expect one "Withdrawal amount must be greater than 0" error.
-            assert!(result.is_err());
-            let err = result.unwrap_err();
-            assert!(
-                err.to_string()
-                    .contains("Withdrawal amount must be greater than 0"),
-                "Expected withdrawal of zero (after rounding) to be rejected"
-            );
+    let account_guard = engine.accounts.get(1).await.unwrap();
+    let account = account_guard.get(&1).unwrap();
 
-            let account_guard = engine.accounts.get(1).await.unwrap();
-            let account = account_guard.get(&1).unwrap();
-
-            assert_eq!(
-                account.total,
-                Decimal::from_str("7.7129").unwrap(),
-                "Total should be 7.7129 after valid deposits and one valid tiny withdrawal"
-            );
-            assert_eq!(
-                account.available,
-                Decimal::from_str("7.7129").unwrap(),
-                "Available should match total"
-            );
-            assert_eq!(
-                account.held,
-                Decimal::from_str("0.0000").unwrap(),
-                "Held should be 0"
-            );
-        })
-    };
-
-    handle.await.unwrap();
+    assert_eq!(
+        account.total,
+        Decimal::from_str("7.7129").unwrap(),
+        "Total should be 7.7129 after valid deposits and one valid tiny withdrawal"
+    );
+    assert_eq!(
+        account.available,
+        Decimal::from_str("7.7129").unwrap(),
+        "Available should match total"
+    );
+    assert_eq!(
+        account.held,
+        Decimal::from_str("0.0000").unwrap(),
+        "Held should be 0"
+    );
 }
 
 #[tokio::test]
 async fn unit_test_subtraction_overflow_async() {
-    // Create temporary files for previous-session data
     let mut transactions_file = NamedTempFile::new().unwrap();
     let mut accounts_file = NamedTempFile::new().unwrap();
 
-    // ---- Transactions from previous session (all valid) ----
     transactions_file
         .write_all(
             b"type,client,tx,amount\n\
@@ -811,9 +679,7 @@ async fn unit_test_subtraction_overflow_async() {
         )
         .unwrap();
 
-    // ---- Accounts dump with a malicious huge-negative amount for client 3 ----
     let huge_negative = rust_decimal::Decimal::MIN.to_string();
-    // IMPORTANT: header must be exactly these 5 columns, NO trailing comma!
     let accounts_csv = format!(
         r#"client,available,held,total,locked
             1,5.0000,0.0000,5.0000,false
@@ -829,97 +695,74 @@ async fn unit_test_subtraction_overflow_async() {
 
     let engine = Arc::new(AsyncEngine::new());
 
-    let handle = {
-        //no need to use it afterward -- let engine = Arc::clone(&engine);
-        //no need to use it afterward -- let transactions_path = transactions_path.clone();
-        //no need to use it afterward -- let accounts_path = accounts_path.clone();
+    engine
+        .load_from_previous_session_csvs(&transactions_path, &accounts_path)
+        .await
+        .expect("Failed to load from previous-session CSVs");
 
-        tokio::spawn(async move {
-            // 1. Load the "corrupted" state from previous session
-            engine
-                .load_from_previous_session_csvs(&transactions_path, &accounts_path)
-                .await
-                .expect("Failed to load from previous-session CSVs");
+    let mut dispute_file = NamedTempFile::new().unwrap();
+    let dispute_csv = "type,client,tx,amount\n\
+                       dispute,3,3,\n";
+    write!(dispute_file, "{}", dispute_csv).unwrap();
+    let dispute_path = dispute_file.path().to_str().unwrap().to_owned();
 
-            // 2. Now send a dispute on the malicious deposit → subtraction overflow
-            let mut dispute_file = NamedTempFile::new().unwrap();
-            let dispute_csv = "type,client,tx,amount\n\
-                               dispute,3,3,\n";
-            write!(dispute_file, "{}", dispute_csv).unwrap();
-            let dispute_path = dispute_file.path().to_str().unwrap().to_owned();
+    let result = engine
+        .read_and_process_transactions_from_csv(&dispute_path, BUFFER_SIZE)
+        .await;
 
-            let result = engine
-                .read_and_process_transactions_from_csv(&dispute_path, BUFFER_SIZE)
-                .await;
-
-            // Expected: subtraction overflow when trying to hold the huge negative amount
-            assert!(
-                result.is_err(),
-                "Dispute should fail with subtraction overflow"
-            );
-            let err = result.unwrap_err();
-            assert!(
-                err.to_string().contains("Subtraction overflow"),
-                "Expected `Subtraction overflow` error, got: {}",
-                err
-            );
-        })
-    };
-
-    handle.await.unwrap();
+    assert!(
+        result.is_err(),
+        "Dispute should fail with subtraction overflow"
+    );
+    let err = result.unwrap_err();
+    assert!(
+        err.to_string().contains("Subtraction overflow"),
+        "Expected `Subtraction overflow` error, got: {}",
+        err
+    );
 }
 
 #[tokio::test]
 async fn reg_test_from_csv_file_basic_async() {
-    // Arrange: Use the real CSV file from tests/ folder
     let input_path = "tests/transactions_basic.csv";
-
-    // Create the async engine
     let engine = Arc::new(AsyncEngine::new());
 
-    let handle = {
-        tokio::spawn(async move {
-            //no need to use it afterward -- let engine = Arc::clone(&engine);
-            match engine
-                .read_and_process_transactions_from_csv(input_path, BUFFER_SIZE)
-                .await
-            {
-                Ok(()) => println!("Transactions processed successfully"),
-                Err(e) => println!(" Some error occurred while processing transactions: {}", e),
-            }
+    match engine
+        .read_and_process_transactions_from_csv(input_path, BUFFER_SIZE)
+        .await
+    {
+        Ok(()) => println!("Transactions processed successfully"),
+        Err(e) => println!(" Some error occurred while processing transactions: {}", e),
+    }
 
-            // If your AsyncEngine doesn't expose accounts via DashMap, you can iterate:
-            assert_eq!(engine.accounts.len().await, 2, "There should be 2 accounts");
+    assert_eq!(engine.accounts.len().await, 2, "There should be 2 accounts");
 
-            let account_guard = engine.accounts.get(1).await.unwrap();
-            let account1 = account_guard.get(&1).unwrap();
+    let account_guard = engine.accounts.get(1).await.unwrap();
+    let account1 = account_guard.get(&1).unwrap();
 
-            assert_eq!(
-                account1.total,
-                Decimal::from_str("10.0001").unwrap(),
-                "Account 1 total should be 10.0001"
-            );
-            assert_eq!(
-                account1.total, account1.available,
-                "Account 1 total should equal available"
-            );
-            assert_eq!(account1.held, Decimal::ZERO, "Account 1 held should be 0");
+    assert_eq!(
+        account1.total,
+        Decimal::from_str("10.0001").unwrap(),
+        "Account 1 total should be 10.0001"
+    );
+    assert_eq!(
+        account1.total, account1.available,
+        "Account 1 total should equal available"
+    );
+    assert_eq!(account1.held, Decimal::ZERO, "Account 1 held should be 0");
 
-            let account_guard = engine.accounts.get(2).await.unwrap();
-            let account2 = account_guard.get(&2).unwrap();
-            assert_eq!(
-                account2.total,
-                Decimal::from_str("5").unwrap(),
-                "Account 2 total should be 5"
-            );
-            assert_eq!(
-                account2.total, account2.available,
-                "Account 2 total should equal available"
-            );
-            assert_eq!(account2.held, Decimal::ZERO, "Account 2 held should be 0");
-        })
-    };
-    handle.await.unwrap();
+    let account_guard = engine.accounts.get(2).await.unwrap();
+    let account2 = account_guard.get(&2).unwrap();
+    assert_eq!(
+        account2.total,
+        Decimal::from_str("5").unwrap(),
+        "Account 2 total should be 5"
+    );
+    assert_eq!(
+        account2.total, account2.available,
+        "Account 2 total should equal available"
+    );
+    assert_eq!(account2.held, Decimal::ZERO, "Account 2 held should be 0");
 }
 
 ///Tests the handling of several erroneous transactions from a CSV file.
