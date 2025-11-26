@@ -1080,9 +1080,11 @@ use std::thread;
 fn reg_test_engine_consistency_with_concurrent_processing() {
     const BUF_SIZE: usize = 1024;
     // Generate 3 temp files with consistent random transactions
-    let temp_file1 = generate_random_transaction_concurrent_stream(10000, 0, 1, 10).unwrap();
-    let temp_file2 = generate_random_transaction_concurrent_stream(10000, 10001, 200, 300).unwrap();
-    let temp_file3 = generate_random_transaction_concurrent_stream(10000, 20001, 400, 500).unwrap();
+    let temp_file1 = generate_random_transaction_concurrent_stream(1_000_000, 0, 1, 10).unwrap();
+    let temp_file2 =
+        generate_random_transaction_concurrent_stream(1_000_000, 1_000_001, 200, 300).unwrap();
+    let temp_file3 =
+        generate_random_transaction_concurrent_stream(1_000_000, 2_000_001, 400, 500).unwrap();
 
     /* debug
     let mut writer = Writer::from_writer(std::io::stdout());

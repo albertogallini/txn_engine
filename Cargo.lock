@@ -1091,6 +1091,7 @@ dependencies = [
  "csv",
  "csv-async",
  "dashmap",
+ "futures-executor",
  "futures-util",
  "rand",
  "rust_decimal",

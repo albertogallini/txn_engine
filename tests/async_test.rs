@@ -812,7 +812,7 @@ async fn reg_test_from_csv_file_error_conditions_async() {
         Ok(()) => panic!("Expected an error, but got success"),
         Err(TransactionProcessingError::MultipleErrors(errors)) => {
             let expected_errors = vec![
-                "Error reading transaction record: CSV deserialize error: record 18 (line 19, byte: 335): Unknown transaction type: DEPOSIT",
+                "Error reading transaction record: CSV deserialize error: record 18 (line: 19, byte: 335): Unknown transaction type: DEPOSIT",
                 "Error processing Transaction { ty: Deposit, client: 6, tx: 9, amount: Some(0.0000), disputed: false }: Deposit amount must be greater than 0",
                 "Error processing Transaction { ty: Withdrawal, client: 6, tx: 10, amount: Some(-5.0000), disputed: false }: Withdrawal amount must be greater than 0",
                 "Error processing Transaction { ty: Deposit, client: 6, tx: 12, amount: Some(5000.0000), disputed: false }: Addition overflow",
@@ -866,9 +866,9 @@ async fn reg_test_from_csv_file_malformed_async() {
         Err(TransactionProcessingError::MultipleErrors(errors)) => {
             let expected_errors = vec![
                 "Error processing Transaction { ty: Withdrawal, client: 1, tx: 3, amount: Some(5.0000), disputed: false }: Account not found",
-                "Error reading transaction record: CSV deserialize error: record 1 (line 2, byte: 22): invalid digit found in string", 
-                "Error reading transaction record: CSV deserialize error: record 2 (line 3, byte: 46): Unknown transaction type: deposi",
-                "Error reading transaction record: CSV deserialize error: record 4 (line 5, byte: 94): Unknown transaction type: witawal"
+                "Error reading transaction record: CSV deserialize error: record 1 (line: 2, byte: 22): invalid digit found in string", 
+                "Error reading transaction record: CSV deserialize error: record 2 (line: 3, byte: 46): Unknown transaction type: deposi",
+                "Error reading transaction record: CSV deserialize error: record 4 (line: 5, byte: 94): Unknown transaction type: witawal"
             ];
 
             // Compare the sorted errors to ensure the order doesn't matter
@@ -1106,11 +1106,11 @@ async fn reg_test_engine_consistency_with_concurrent_processing_async(
 ) -> Result<(), Box<dyn std::error::Error>> {
     const BUF_SIZE: usize = 1024;
     // Generate 3 temp files with consistent random transactions
-    let temp_file1 = generate_random_transaction_concurrent_stream(10_000, 0, 1, 10).unwrap();
+    let temp_file1 = generate_random_transaction_concurrent_stream(1_000_000, 0, 1, 10).unwrap();
     let temp_file2 =
-        generate_random_transaction_concurrent_stream(10_000, 10_001, 200, 300).unwrap();
+        generate_random_transaction_concurrent_stream(1_000_000, 1_000_001, 200, 300).unwrap();
     let temp_file3 =
-        generate_random_transaction_concurrent_stream(10_000, 20_001, 400, 500).unwrap();
+        generate_random_transaction_concurrent_stream(1_000_000, 2_000_001, 400, 500).unwrap();
 
     /* debug
     let mut writer = Writer::from_writer(std::io::stdout());
@@ -1128,8 +1128,6 @@ async fn reg_test_engine_consistency_with_concurrent_processing_async(
     let engine_seq = Arc::new(AsyncEngine::new());
     let engine_concurrent = Arc::new(AsyncEngine::new());
 
-    // Process files sequentially with engine1
-    // === Sequential processing (reference) ===
     // Process files sequentially with engine1
     match engine_seq
         .read_and_process_transactions(File::open(temp_file1.path()).await.unwrap(), BUF_SIZE)

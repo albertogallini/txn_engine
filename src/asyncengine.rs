@@ -6,6 +6,7 @@ use crate::datastr::account::Account;
 use crate::datastr::transaction::{
     ClientId, Transaction, TransactionProcessingError, TransactionType, TxId,
 };
+use csv::ReaderBuilder;
 use rust_decimal::Decimal;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -15,7 +16,9 @@ use csv_async::{AsyncReaderBuilder, AsyncWriterBuilder, Trim};
 use futures_util::stream::StreamExt;
 use tokio::fs::File;
 use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt, BufReader, BufWriter};
-use tokio::sync::RwLockWriteGuard;
+use tokio::sync::{mpsc, RwLockWriteGuard};
+use tokio::task;
+use tokio_util::io::SyncIoBridge;
 
 // Reuse the same errors
 pub use crate::engine::{EngineError, EngineSerDeserError};
@@ -35,7 +38,7 @@ pub enum AsycEngineSerDeserError {
 }
 
 pub trait AsycEngineFunctions {
-    async fn read_and_process_transactions<R: AsyncRead + Unpin + Send>(
+    async fn read_and_process_transactions<R: AsyncRead + Unpin + Send + 'static>(
         &self, // self is NOT mutable as this function can be called concurrently and its implementation must be thread-safe.
         stream: R,
         buffer_size: usize,
@@ -144,39 +147,62 @@ impl AsyncEngine {
 }
 
 impl AsycEngineFunctions for AsyncEngine {
-    async fn read_and_process_transactions<R: AsyncRead + Unpin + Send>(
+    async fn read_and_process_transactions<R>(
         &self,
         stream: R,
         buffer_size: usize,
-    ) -> Result<(), TransactionProcessingError> {
-        let reader = BufReader::with_capacity(buffer_size, stream);
-        let mut csv_reader = AsyncReaderBuilder::new()
-            .has_headers(true)
-            .trim(Trim::All)
-            .create_deserializer(reader);
+    ) -> Result<(), TransactionProcessingError>
+    where
+        R: AsyncRead + Unpin + Send + 'static,
+    {
+        // Channel to parallelize CSV reading (producer) and transaction processing (consumer)
+        let (tx_sender, mut tx_receiver) = mpsc::unbounded_channel::<Transaction>();
+        let (err_sender, mut err_receiver) = mpsc::unbounded_channel::<String>();
 
-        let mut records = csv_reader.deserialize::<Transaction>();
-        let mut errors = Vec::with_capacity(1000);
+        let handle = task::spawn_blocking(move || {
+            // We need to wrap the async stream in a SyncIoBridge to convert it to a sync stream
+            // because the csv library only supports sync streams.
+            // We then create a BufReader with the specified buffer size to efficiently read the stream.
+            // Finally, we create a CSV reader from the BufReader.
+            let sync_stream = SyncIoBridge::new(stream);
+            let mut reader = std::io::BufReader::with_capacity(buffer_size, sync_stream);
+            let mut csv_reader = ReaderBuilder::new()
+                .has_headers(true)
+                .trim(csv::Trim::All)
+                .from_reader(&mut reader);
 
-        while let Some(result) = records.next().await {
-            match result {
-                Ok(tx) => {
-                    if let Err(e) = self.process_transaction(&tx).await {
-                        errors.push(format!("Error processing {:?}: {}", tx, e));
+            for result in csv_reader.deserialize::<Transaction>() {
+                match result {
+                    Ok(tx) => {
+                        if tx_sender.send(tx).is_err() {
+                            break;
+                        }
                     }
-                }
-                Err(e) => {
-                    let msg = e.to_string();
-                    if msg.contains("Unknown variant") {
-                        errors.push(
-                            ("Error reading transaction record: unknown transaction type")
-                                .to_string(),
-                        );
-                    } else {
-                        errors.push(format!("Error reading transaction record: {}", msg));
+                    Err(e) => {
+                        let msg = if e.to_string().contains("unknown variant") {
+                            "Error reading transaction record: unknown transaction type".to_string()
+                        } else {
+                            format!("Error reading transaction record: {}", e)
+                        };
+                        let _ = err_sender.send(msg);
                     }
                 }
             }
+        });
+        let mut errors = Vec::new();
+
+        while let Some(tx) = tx_receiver.recv().await {
+            if let Err(e) = self.process_transaction(&tx).await {
+                errors.push(format!("Error processing {tx:?}: {e}"));
+            }
+        }
+
+        while let Ok(err) = err_receiver.try_recv() {
+            errors.push(err);
+        }
+
+        if handle.await.is_err() {
+            errors.push("CSV parser panicked".to_string());
         }
 
         if errors.is_empty() {
