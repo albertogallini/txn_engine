@@ -767,6 +767,114 @@ async fn reg_test_from_csv_file_basic_async() {
     assert_eq!(account2.held, Decimal::ZERO, "Account 2 held should be 0");
 }
 
+#[tokio::test]
+async fn reg_test_from_csv_file_disputed_async() {
+    let engine = AsyncEngine::default();
+    let input_path = "tests/transactions_disputed.csv";
+    match engine
+        .read_and_process_transactions_from_csv(input_path, BUFFER_SIZE)
+        .await
+    {
+        Ok(()) => {}
+        Err(e) => println!(" Some error occurred while processing transactions: {}", e),
+    }
+
+    assert_eq!(engine.accounts.len().await, 6, "Expected six accounts");
+
+    let account3 = engine
+        .accounts
+        .get(3)
+        .await
+        .expect("Account 3 should exist");
+    assert_eq!(
+        account3.get(&3).unwrap().total,
+        Decimal::from_str("100").unwrap(),
+        "Account 3 total should be 100"
+    );
+    assert!(
+        !account3.get(&3).unwrap().locked,
+        "Account 3 should not be locked"
+    );
+
+    let account5 = engine
+        .accounts
+        .get(5)
+        .await
+        .expect("Account 5 should exist");
+    assert_eq!(
+        account5.get(&5).unwrap().total,
+        Decimal::from_str("0").unwrap(),
+        "Account 5 total should be 0"
+    );
+    assert!(
+        account5.get(&5).unwrap().locked,
+        "Account 5 should be locked"
+    );
+
+    let account4 = engine
+        .accounts
+        .get(4)
+        .await
+        .expect("Account 4 should exist");
+    assert_eq!(
+        account4.get(&4).unwrap().total,
+        Decimal::from_str("0").unwrap(),
+        "Account 4 total should be 0"
+    );
+    assert!(
+        account4.get(&4).unwrap().locked,
+        "Account 4 should be locked"
+    );
+
+    let account10 = engine
+        .accounts
+        .get(10)
+        .await
+        .expect("Account 10 should exist");
+    assert_eq!(
+        account10.get(&10).unwrap().total,
+        Decimal::from_str("80").unwrap(),
+        "Account 10 total should be 80"
+    );
+    assert_eq!(
+        account10.get(&10).unwrap().held,
+        Decimal::from_str("-20").unwrap(),
+        "Account 10 held should be -20"
+    );
+
+    let account20 = engine
+        .accounts
+        .get(20)
+        .await
+        .expect("Account 20 should exist");
+    assert_eq!(
+        account20.get(&20).unwrap().total,
+        Decimal::from_str("80").unwrap(),
+        "Account 20 total should be 80"
+    );
+    assert_eq!(
+        account20.get(&20).unwrap().held,
+        Decimal::from_str("0").unwrap(),
+        "Account 20 held should be 0"
+    );
+
+    let account30 = engine
+        .accounts
+        .get(30)
+        .await
+        .expect("Account 30 should exist");
+    assert_eq!(
+        account30.get(&30).unwrap().total,
+        Decimal::from_str("120").unwrap(),
+        "Account 30 total should be 120"
+    );
+    assert_eq!(
+        account30.get(&30).unwrap().held,
+        Decimal::from_str("20").unwrap(),
+        "Account 30 held should be 20"
+    );
+}
+
 ///Tests the handling of several erroneous transactions from a CSV file.
 
 /// type       ,client,tx   ,amount
