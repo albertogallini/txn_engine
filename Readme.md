@@ -12,7 +12,7 @@ This project implements a transaction processing system with the following capab
 - Locks accounts upon chargeback.
 - There are two transaction processeing engines. The first -`Engine`- is sychronous and build on top of DashMap which manage sharded locked Hashmap, The second -`AsycEngine` is asyncronosu and build on custom Hasmap that suport harded locking but offers asyc non blocking  api (insert/entry/iterators etc.. ) 
 
-**⚠️ NOTE:** This documentation uses main `Engine` to describe the architecture and behaviour as `AsycEngine` replicate the logic of `Engine` just offering asyc api. whenever there is a relevant difference in the beaviour and/or in the implication of using an async logic the ⚠️ sybmol is used. Additional [Asyc VS Sync performance assesment](./asyncvssync.md) has been added to report the performance assesment of using an asyc engine vs a syc one. 
+**⚠️ NOTE:** This documentation uses main `Engine` to describe the architecture and behaviour as `AsycEngine` replicates the logic of `Engine` just offering asyc api. whenever there is a relevant difference in the beaviour and/or in the implications of using an async logic, the ⚠️ sybmol is used. Furthermore,  [Asyc VS Sync performance assesment](./asyncvssync.md) document has been added to report the performance assesment of using an async engine vs a sync one. 
 
 
 ### Features
