@@ -1,7 +1,7 @@
 # Async Engine VS Sync Engine - Performance analysis
 
 ### TL;DR
-
+Here we compare `AsycEngine` vs `Engine` performance analyizing their behviour under different conditions:
 | Workload                          | Winner       | Speedup       | Reason                                                   |
 |-----------------------------------|--------------|---------------|----------------------------------------------------------|
 | `stress-test.sh` (one huge file)  | **Async**    | **+20–24%**   | Parsing and processing run in **true parallel**          |
@@ -9,7 +9,7 @@
 | Production (10k+ concurrent clients  )    | **Async**    |    n/a    | Only async scales to massive concurrent connections     |
 
 
-## concurrency test unit
+## Analysis of concurrency test unit `reg_test_engine_consistency_with_concurrent_processing/_async`
 
 Two implementations are provided:
 
@@ -39,7 +39,7 @@ test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 21 filtered out; fin
 
 | Factor                  | Sync (`std::thread`)                              | Async (`spawn_blocking` + channel)                                       | Winner |
 |-------------------------|----------------------------------------------------|---------------------------------------------------------------------------|--------|
-| Number of threads       | 3 real OS threads                                  | 3 blocking threads + 1–8 async worker threads                             | Sync   |
+| Number of threads       | 3 real OS threads                                  | 3 blocking threads +  async workers threads                             | Sync   |
 | Memory allocations      | Only CSV parsing                                   | +3_000_000 `send()` + 3_000_000 `recv()` allocations                     | Sync   |
 | Channel overhead        | None                                               | `flume` / `tokio::mpsc` ≈ 100–300 ns per message → 300–900 ms total      | Sync   |
 | Lock contention         | `DashMap` sharding → almost zero contention       | Same `DashMap` (or slightly slower `tokio::RwLock`)                       | Tie    |
@@ -49,27 +49,27 @@ test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 21 filtered out; fin
 **Bottom line:**  
 On this specific benchmark (three 1-million-row files) we pay the unavoidable cost of **3 million channel messages**. Even the fastest channel in the Rust ecosystem (`flume::unbounded`) adds several hundred milliseconds — the ~4-second gap we observe is expected and cannot be eliminated.
 
-### But in real production the tables turn completely
+### But in  production desinged under the assumption to mange thousdands of concurrent transation on the same engine instance things change: 
 
 ```rust
-// This will OOM/crash with >10,000 concurrent clients
+// Pefromance will drammatically degratate (or even getting a crash) with >10,000 concurrent clients
 for client in 10_000_clients {
     std::thread::spawn(move || process_client(client));
 }
 
-// This flies – handles hundreds of thousands of connections effortlessly
+// This handles hundreds of thousands of connections effortlessly
 for client in 10_000_clients {
     tokio::spawn(async move {
         engine.process_transaction(&tx).await;
     });
 }
 ```
-This is purely technical consideration. The strong need of an Async Engine must evaluated togeter to the overll system desing and the use cases e.g.: actual
-number of concurrent client in the unit of time. This metrics tell us exaclty if we get into the scenario of having  thousands of conccurent threads on the 
-same node (which is not managable)
-
+The strong need for an **Async Engine** must be evaluated together with the **overall system design** and the **use cases** (e.g., the actual number of concurrent clients in a unit of time per physical node/instance of the engine). This metric tells us exactly if we get into the scenario of having thousands of **concurrent threads** on the same node (which is not manageable).
+This is well **elaborated** in [The Async vs Sync impact on scalability section in the README.md](./README.md#L484) and put into perspective and relation with the memory footprint of the process.
 
 ## stress test perfomance `stress-test.sh`
+
+Here below the comparison of Async vs Sync engine stress test: 
 
 ```
 txn_engine 👉 ./stress-test.sh async
@@ -174,7 +174,7 @@ When running the realistic stress test (`stress-test.sh`) on a single large file
 ```
 
 
-### Benefits of using channles during the async CSV parsing
+### Benefits of using channles during the async CSV parsing (`AsyncEngine::read_and_process_transactions`)
 
 ```rust
 spawn_blocking → sync CSV parsing (dedicated real threads)

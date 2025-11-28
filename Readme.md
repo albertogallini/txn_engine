@@ -10,6 +10,10 @@ This project implements a transaction processing system with the following capab
 - Manages client accounts, including available, held, and total funds.
 - Handles transaction disputes for both deposits and withdrawals.
 - Locks accounts upon chargeback.
+- There are two transaction processeing engines. The first -`Engine`- is sychronous and build on top of DashMap which manage sharded locked Hashmap, The second -`AsycEngine` is asyncronosu and build on custom Hasmap that suport harded locking but offers asyc non blocking  api (insert/entry/iterators etc.. ) 
+
+**⚠️ NOTE:** This documentation uses main `Engine` to describe the architecture and behaviour as `AsycEngine` replicate the logic of `Engine` just offering asyc api. whenever there is a relevant difference in the beaviour and/or in the implication of using an async logic the ⚠️ sybmol is used. Additional [Asyc VS Sync performance assesment](./asyncvssync.md) has been added to report the performance assesment of using an asyc engine vs a syc one. 
+
 
 ### Features
 
@@ -173,9 +177,12 @@ The separation of public and private functions in the `Engine` struct is achieve
     - **`process_resolve`**: Resolves a dispute, releasing the `disputed` transaction. 
     - **`process_chargeback`**: Reverses a disputed transaction, effectively removing the associated funds from the client's account and locking the account.
 
+**⚠️ NOTE:** `AsyncEngine` exposes exaclty the same functions and extends equivalente Asyc traits : `AsycEngineStateTransitionFunctions` and `AsyncEngineFunctions`
+
 Here below a simplified diagram of the main structs and relationships:<br>
 <img src="./img/scheme.png" width="600">
 
+**⚠️ NOTE:** `AsyncEngine` is relationship diagram jusre relaces the traits with `AsycEngineStateTransitionFunctions` and `AsyncEngineFunctions` and the `DashMap` with `ShardedRwLockMap`.
 
 ### Error Handling
 
@@ -227,6 +234,7 @@ Error: Some errors occurred while processing transactions:
   - Error processing Transaction { ty: Dispute, client: 9, tx: 21, amount: None, disputed: false }: Transaction not found
 
 ```
+**⚠️ NOTE:** `AsyncEngine` uses exactly the same errors. 
 
 ### Memory Efficiency
 The engine is designed to be memory efficient, processing transactions through buffering the input csv stream to ensure scalability even with large datasets. See `read_and_process_transactions` in `./src/engine.rs`
@@ -316,14 +324,14 @@ NOTES:
     }
     ```
 
-#### Async Verision
+#### ⚠️ Async Verision
 The `AsyncEngine` operate functionally in exaclt the same way as the sync `Engine`, but rely on `ShardedRwLockMap` which expose asyc methods. This allow to build the same logic but complity `async`. This can be beneficial whenver you want to use the transaction engine in a context when many (+thousands) of concurrent events have to be managed  by the engine on the same node. This allow to avoid to spawn a separate OS thread for each event (e.g. connection) which will lead to for every concurrent to performance degradation and system instability. 
 While the Dash map still protect from contetion and locking thrashing, The major implications in this scenario are:
   1. Context Switching Overhead:  The OS scheduler must pause execution of one thread (save its state/registers) and resume execution of another. 
   2. Memory Consumption: Every OS thread requires a dedicated block of memory for its stack. Default stack sizes (often 1-2 MB) are multiplied by the number of threads.
 
 
-Architecture, interfaces and api exposed by `AsyncEngine` are exaclty the smae of `Engine`. See [Asyc VS Sync performance assesment](./asyncvssync.md)
+Architecture, interfaces and api exposed by `AsyncEngine` are exaclty the smae of `Engine`. See also [Asyc VS Sync performance assesment](./asyncvssync.md)
 
 
 
@@ -347,9 +355,9 @@ Architecture, interfaces and api exposed by `AsyncEngine` are exaclty the smae o
 - It is not possible to dispute multiple times the same transaction. This is prevented by the `disputed` flag in the `Transaction` struct.
 - It is not possible to resolve a non-disputed transaction. Again, this is prevented by the `disputed` flag in the `Transaction` struct.
 
-NOTE on **locked** account: Once an account is locked, no further actions are possible. Neither the `Engine` nor `EngineFunctions` expose APIs to unlock the account. The only possible way to unlock it is through offline methods (i.e.: manual intervention) on the account storage, followed by loading the `txn_engine` from a previously generated and modified dump (see the next section).
+NOTE on **locked** account: Once an account is locked, no further actions are possible. Neither the `Engine`/`AsyncEngine` nor `EngineFunctions`/`AsyncEngineFuntions` expose APIs to unlock the account. The only possible way to unlock it is through offline methods (i.e.: manual intervention) on the account storage, followed by loading the `txn_engine` from a previously generated and modified dump (see the next section).
 
-Implementation: see `fn check_transaction_semantic` and `impl EngineFunctions for Engine` in `./src/engine.rs`
+Implementation: see `fn check_transaction_semantic` and `impl EngineFunctions for Engine` in `./src/engine.rs` or equivalent methid in `./src/asyncengine.rs`.
 
 ### Engine state serialization/deserialization:
 The `-dump` command line parameter will cause the `Engine` to dump the entire content of the internal `transaction log` to CSV file (in addition to the accounts on the standard output). The file will be written in the current working directory.
@@ -387,6 +395,7 @@ Reasons to use serde:
   (like JSON for API responses, or binary formats for efficiency), Serde can handle these conversions
   without changing your core data structures. This makes your code more adaptable to changes in data storage or transmission methods
 
+**⚠️ NOTE:** See also [Asyc VS Sync performance assesment](./asyncvssync.md) to check how the deserialization of csv has been maanged in an asyc workflow.
 
 ## Stress Test script & performance measure:
 
@@ -439,6 +448,8 @@ The best approach would be to generate the transactions offline and process them
 In reference to the above table, the performance of txn_engine, on the aforementioned assumption, on this machine is ~`1.200.000 transactions/s` with an average `~[17.000 (Process Memory) - 200.000 (Engine Memory)] transactions/MB` memory impact on the user account/transaction log storage.
 The plots also show that both time and memory scale as O(n).
 
+**⚠️NOTE:** See [Asyc VS Sync performance assessment](./asyncvssync.md) for a comparison between `Engine` abn `AsyncEngine`.
+
 ### Notes & Comments
 -  The Engine size (`Engine.size_of`) does not take into account the data structure overhead. Please read the comment of `Engine.size_of` for more detalis.
 -  As the transactions are generated randomly, the error rate can be quite high, which affects the size of the maps. As the error rate is high the  maps grow slower than a real use case.
@@ -456,11 +467,9 @@ The plots also show that both time and memory scale as O(n).
     can be managed on a commodity machine equipped with 64Gb. So **sharding the client Ids across multiple nodes** and making them sticky to a specific node (e.g. using consistent hashing) with a farm of N commodity nodes we can  manage N Billions transactions in terms of memory footprint. 
   - 200 transactions per client per day (which is a very high value)
   - ~17.000 transactions/MB estimanted value could be higher than in a real world use case because of the high error rates generated by `generate_random_transactions`. In this analysis we compensate that assuming 200 transactions per client per day. 
-  - In a production enviroment a reasonable assumption is that we can discard (i.e. not loading inthe `transaction_log` anymore) transactions older than a certain number of days (**K**), as we won't allow disputes on transactions older than that, otherwise the memory will grow indefinitely. If a dispute for a transaction older than K days is received, it will simply discarded.
+  - In a production enviroment a reasonable assumption is that we can discard (i.e. not loading in the `transaction_log` anymore) transactions older than a certain number of days (**K**), as we won't allow disputes on transactions older than that, otherwise the memory will grow indefinitely. If a dispute for a transaction older than K days is received, it will simply discarded.
   - Assuming K = 30 days. Also this is quite high value.
   - In a production enviroment the engine processes should be restarted regularly (e.g.: every day): at each restart the process should load from previous session.
-
-
 
 - The solution scales horizontally as follows
   - 200 x 30 days  = 6.000 transactions per client per period have to be stored
@@ -468,10 +477,21 @@ The plots also show that both time and memory scale as O(n).
   - We can add a node increasing throughput and without sacrificing latency, e.g.: a farm with 100 64Gb nodes can manage 16.6 M clients.
   - NOTE: `pub type ClientId = u16` should be moved to `u32` or `u64` as `u16` can only represent 65536 clients.
 
-    **⚠️ NOTE:  Under this assumption both Async and Sync Engine works equally well as the number of thread per seconds is 166000/(30 x 24 x 3600) =  0,06 . So the Sync Engine executed in the context of a thread pool that statcally spwan a few threads works well. Conversely if the system is desiged to frequently flush the transaction log and load only upon `disputes` for example then we have much lower memory constraits forfor a singel node and we would need of an Async engine to manage the muhc higher concurrency. **
 
 - The solution scales vertically as follows
   - increase the node memory will allow to manage more clients per node. e.g.: 256 Gb memory will allow to manage 16.6 x 4 =~ 66 M clients (which is in line with the # of customers of biggest retail banks on earth)
+
+ **⚠️ Important Note: Asyc vs Sync impact on scalabilty ⚠️**:
+
+  - Under the current assumptions, **both the Async and Sync engines work equally well**. The peak concurrency is ~166,000 clients / (30 × 24 × 3600 s) ≈ **0.06 threads per second** per node. A sync engine running on a small, statically-sized thread pool is more than sufficient.
+
+  - Conversely, if the system is **designed to frequently flush the transaction log** (the main contributor to memory footprint) and **only load old transactions on demand** (e.g., when a dispute occurs — which is much rarer than deposits/withdrawals), memory usage per node drops dramatically. In this scenario, we can support **much higher concurrency**, and an **Async engine becomes necessary** to handle thousands of concurrent network clients efficiently.
+
+  - Currently, **neither the Async nor Sync engine supports runtime log flushing/loading**. The `load_from_previous_session_csvs` function is blocking and intended only for startup. Even the async version is effectively blocking in this context. To support real-time flushing/loading, we would need a **channel + dedicated background thread** with a producer/consumer pattern — exactly like the one used in `AsyncEngine::read_and_process_transactions`.
+
+  - Additionally, every method currently enforces **transaction ID uniqueness within a session** (defined as the **K**-day dispute window). This limits maximum throughput. To achieve significantly higher transactions-per-second rates, we should **remove the session-wide uniqueness check** and assume transaction IDs are globally unique by design (or validated upstream).
+
+
 
 #### Consideration about persistency and caching: 
 In a real-world solution, it's important to store and keep the `Engine` state persistent on disk or in a database to recover the status in case of a crash. Additionally, the `Engine` could keep only the most active users in memory by ***implementing a caching logic***. This will reduce the process memory footprint, allowing more clients per node.<br>
