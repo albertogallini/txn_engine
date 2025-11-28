@@ -162,7 +162,7 @@ This project consists of a set of key components, each responsible for different
 
 The separation of public and private functions in the `Engine` struct is achieved using two distinct traits: `EngineFunctions` for public APIs and `EngineStateTransitionFunctions` for internal state management, which enhances clarity, reduces complexity, and improves security by preventing unintended modifications.
 
-  - The `EngineFunctions` trait provides the following **public** methods to interact with the Engine and operate on the internal state:
+  - The `EngineFunctions` trait provides the following **public** methods to interact with the Engine and operates on the internal state:
     - **`read_and_process_transactions`**: Reads transactions from a stream and processes them.
     - **`read_and_process_transactions_from_csv`**: Reads transactions from a CSV file and processes them using `read_and_process_transactions`.
     - **`load_from_previous_session_csvs`**: Loads transactions and accounts from CSV files dumped from a previous session to populate the internal maps. (This functionality is public but not exposed as command line pramenter)
@@ -323,12 +323,14 @@ NOTES:
         Ok(())
     }
     ```
+#### ⚠️ Async Version
 
-#### ⚠️ Async Verision
-The `AsyncEngine` operate functionally in exaclt the same way as the sync `Engine`, but rely on `ShardedRwLockMap` which expose asyc methods. This allow to build the same logic but complity `async`. This can be beneficial whenver you want to use the transaction engine in a context when many (+thousands) of concurrent events have to be managed  by the engine on the same node. This allow to avoid to spawn a separate OS thread for each event (e.g. connection) which will lead to for every concurrent to performance degradation and system instability. 
-While the Dash map still protect from contetion and locking thrashing, The major implications in this scenario are:
-  1. Context Switching Overhead:  The OS scheduler must pause execution of one thread (save its state/registers) and resume execution of another. 
-  2. Memory Consumption: Every OS thread requires a dedicated block of memory for its stack. Default stack sizes (often 1-2 MB) are multiplied by the number of threads.
+The **`AsyncEngine`** operates functionally in **exactly** the same way as the sync **`Engine`**, but **relies** on **`ShardedRwLockMap`** which **exposes** async methods. This **allows** to build the same logic but **completely** `async`. This can be beneficial **whenever** you want to use the transaction engine in a context where many (+thousands) of concurrent events have to be managed by the engine on the same node. This **allows** to avoid **spawning** a separate **OS thread** for each event (e.g., connection), which would lead to **performance degradation and system instability** due to the volume of concurrent threads.
+
+While the **Dash map** still **protects** from **contention** and **locking thrashing**, the major implications in this scenario are:
+
+1.  **Context Switching Overhead:** The OS scheduler must pause execution of one thread (save its state/registers) and resume execution of another.
+2.  **Memory Consumption:** Every OS thread requires a dedicated block of memory for its stack. Default stack sizes (often 1-2 MB) are multiplied by the number of threads.
 
 
 Architecture, interfaces and api exposed by `AsyncEngine` are exaclty the smae of `Engine`. See also [Asyc VS Sync performance assesment](./asyncvssync.md)
