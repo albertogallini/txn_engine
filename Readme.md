@@ -24,7 +24,8 @@ This project implements a transaction processing system with the following capab
   - Comprehensive error checks throughout transaction processing.
   - I/O & Ser/DeSer error handling. 
 - **Memory Efficiency**: Processes transactions using stream buffering to manage memory usage even with large datasets.
-- **Concurrency Management**: Internal transaction engine state (`accouts` and `transactions_log`) are implemented using [`DashMap`](https://docs.rs/dashmap/latest/dashmap/struct.DashMap.html) to handle concurrent access efficiently.
+- **Concurrency Management Sync Version**: Internal transaction engine state (`accouts` and `transactions_log`) are implemented using [`DashMap`](https://docs.rs/dashmap/latest/dashmap/struct.DashMap.html) to handle concurrent access efficiently.
+- **Concurrency Management Async Version**: The async version uses `tokio::task::spawn_blocking` to run the CSV parsing in a separate thread and a channel to communicate between the threads. This allows the engine to process transactions concurrently with the parsing, improving performance. It uses a brand new Async verison of the Enging: `AsyncEngine` and a new async shareded-locked map `ShardedRwLockMap`
 - **Generalization of Disputes**: Disputes are managed on both `Deposit` and `Withdrawal`.
 - **Engine state serialization/deserialization**: The `Engine` struct implementing the transaction engine logic is equipped with `load_from_previous_session_csvs`,`dump_account_to_csv` and `dump_transaction_log_to_csvs` functions serialize/deserialize to/from CSV files the internal state (`account` and `transactions_log`).
 
@@ -51,23 +52,44 @@ cargo build --release
 ### Usage
 To process a transactions csv file:
 ```sh
+# Sync mode (default)
 cargo run  -- transactions.csv > accounts.csv
+```
+```sh
+# Async mode
+cargo run --  async transactions.csv > accounts.csv
 ```
 or, for optimized binary:
 ```sh
+# Sync mode (default)
 cargo run --release -- transactions.csv > accounts.csv
+```
+```sh
+# Async mode 
+cargo run --release -- async transactions.csv > accounts.csv
 ```
 
 To process a transactions csv file and dump the engine transaction_log:
 
 ```sh
+# Sync mode (default)
 cargo run -- transactions.csv -dump > accounts.csv
+```
+```sh
+# Async mode 
+cargo run -- async transactions.csv -dump > accounts.csv
 ```
 
 For stress testing with internally generated transactions (`release` mode is more appropriate here):
 
 ```sh
+# Sync mode (default)
 cargo run --release -- stress-test 10000 > accounts.csv
+```
+
+```sh
+# Async mode 
+cargo run --release -- async stress-test 10000 > accounts.csv
 ```
 
 Running Tests
@@ -80,6 +102,10 @@ For stress testing suite to measure time and memory conumption:
 
 ```sh
 ./stress-test.sh
+```
+
+```sh
+./stress-test.sh async
 ```
 
 ## Implementation Description & Assumptions 

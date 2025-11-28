@@ -12,27 +12,29 @@ use txn_engine::utility::{generate_random_transactions, get_current_memory};
 
 const BUFFER_SIZE: usize = 16_384;
 
-/// Entry point of the application. Parses command-line arguments to determine the mode of operation
-/// (normal processing or stress testing) and handles transaction processing accordingly.
+/// Main entry point of the transaction engine.
 ///
-/// # Modes
-/// - **Normal mode**: Processes transactions from a specified CSV file and outputs the resulting account states.
-///   Optionally, the session state can be dumped after processing by including the `-dump` flag.
-/// - **Stress test mode**: Generates and processes a specified number of random transactions to test the engine's performance.
+/// The transaction engine processes transactions from a provided CSV file and updates account states accordingly.
 ///
-/// # Command-line Usage
-/// - Normal mode: `cargo run -- transactions.csv [-dump] > accounts.csv`
-/// - Stress test mode: `cargo run -- stress-test <number_of_transactions> > accounts.csv`
+/// Sync mode supports normal processing and stress testing modes.
 ///
-/// # Returns
-/// - `Ok(())` if processing completes successfully.
-/// - `Err(Box<dyn std::error::Error>)` if any errors occur, such as incorrect arguments or processing failures.
+/// Async mode supports normal processing and stress testing modes.
+///
+/// Sync usage:
+///   Normal mode:     cargo run -- transactions.csv [-dump] > accounts.csv
+///   Stress test mode: cargo run -- stress-test <number_of_transactions> > accounts.csv
+///
+/// Async usage:
+///   Normal mode:     cargo run -- async transactions.csv [-dump] > accounts.csv
+///   Stress test mode: cargo run -- async stress-test <number_of_transactions> > accounts.csv
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<String> = env::args().collect();
     if args.len() < 2 || args.len() > 5 {
         eprintln!("Sync Usage:");
         eprintln!("  Normal mode:     cargo run -- transactions.csv [-dump] > accounts.csv");
-        eprintln!("  Stress test mode: cargo run -- stress-test <number_of_transactions> > accounts.csv");
+        eprintln!(
+            "  Stress test mode: cargo run -- stress-test <number_of_transactions> > accounts.csv"
+        );
 
         eprintln!("Async Usage:");
         eprintln!("  Normal mode:     cargo run -- async transactions.csv [-dump] > accounts.csv");
@@ -41,39 +43,39 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         return Err("Incorrect number of arguments".into());
     }
 
-    if args[1] == "async" {
-        eprintln!("Async mode ");
-        if args.len() <= 2 {
-            eprintln!("Usage:");
-            eprintln!(
-                "  Normal mode:     cargo run -- async transactions.csv [-dump] > accounts.csv"
-            );
-            eprintln!("  Stress test mode: cargo run -- async stress-test <number_of_transactions> > accounts.csv");
-            return Err("Insufficient arguments for async mode".into());
-        }
-        eprint!("{} ", args[2]);
-        if args[2] == "stress-test" {
-            // asyc stress test mode
-             eprintln!("stress test mode ");
-            if args.len() != 4 {
-                return Err("Stress test requires a number of transactions to generate".into());
+    match args[1].as_str() {
+        "async" => {
+            // async mode
+            eprintln!("Async mode ");
+            if args.len() <= 2 {
+                eprintln!("Usage:");
+                eprintln!(
+                    "  Normal mode:     cargo run -- async transactions.csv [-dump] > accounts.csv"
+                );
+                eprintln!("  Stress test mode: cargo run -- async stress-test <number_of_transactions> > accounts.csv");
+                return Err("Insufficient arguments for async mode".into());
             }
-            let num_transactions: usize = args[3].parse()?;
-            tokio::runtime::Builder::new_current_thread()
-                .enable_all()
-                .build()?
-                .block_on(async {
+            eprint!("{} ", args[2]);
+            let tokio_runtime =  tokio::runtime::Builder::new_current_thread()
+                    .enable_all()
+                    .build()?;
+            if args[2] == "stress-test" {
+                // asyc stress test mode
+                eprintln!("stress test mode ");
+                if args.len() != 4 {
+                    return Err("Stress test requires a number of transactions to generate".into());
+                }
+                let num_transactions: usize = args[3].parse()?;
+               
+                tokio_runtime.block_on(async {
                     match process_stress_test_async(num_transactions).await {
                         Ok(()) => {}
                         Err(e) => eprintln!("Error: {}", e),
                     };
                 });
-        } else {
-            // normal async processing
-            tokio::runtime::Builder::new_current_thread()
-                .enable_all()
-                .build()?
-                .block_on(async {
+            } else {
+                // normal async processing
+                tokio_runtime.block_on(async {
                     let input_path = &args[2];
                     let mut engine = AsyncEngine::default();
                     match process_normal_async(
@@ -87,19 +89,25 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         Err(e) => eprintln!("Error: {}", e),
                     };
                 });
+            }
         }
-    } else if args[1] == "stress-test" {
-        // sync stress test mode
-        if args.len() != 3 {
-            return Err("Stress test requires a number of transactions to generate".into());
+
+        _ => {
+            // sync mode
+            if args[1] == "stress-test" {
+                // sync stress test mode
+                if args.len() != 3 {
+                    return Err("Stress test requires a number of transactions to generate".into());
+                }
+                let num_transactions: usize = args[2].parse()?;
+                process_stress_test(num_transactions)?;
+            } else {
+                // normal sync processing
+                let input_path = &args[1];
+                let mut engine = Engine::default();
+                process_normal(&mut engine, input_path, args.contains(&"-dump".to_string()))?;
+            }
         }
-        let num_transactions: usize = args[2].parse()?;
-        process_stress_test(num_transactions)?;
-    } else {
-        // normal sync processing
-        let input_path = &args[1];
-        let mut engine = Engine::default();
-        process_normal(&mut engine, input_path, args.contains(&"-dump".to_string()))?;
     }
 
     Ok(())
@@ -195,6 +203,9 @@ fn process_stress_test(num_transactions: usize) -> Result<(), Box<dyn std::error
 ///
 /// # Errors
 /// - `Box<dyn std::error::Error>` if any errors occur while reading from the file, processing transactions, or writing the dump.
+///
+/// # Notes
+/// - This function is asynchronous and returns a Future that resolves to a Result.
 async fn process_normal_async(
     engine: &mut AsyncEngine,
     input_path: &str,
@@ -235,7 +246,7 @@ async fn process_normal_async(
     Ok(())
 }
 
-/// Process a specified number of random transactions and print performance metrics.
+/// Process a specified number of random transactions asynchronously and print performance metrics.
 ///
 /// # Parameters
 /// - `num_transactions`: The number of random transactions to generate and process.
@@ -247,6 +258,7 @@ async fn process_normal_async(
 /// # Notes
 /// - The temporary file is automatically deleted when the function returns.
 /// - The performance metrics are printed to stderr.
+/// - This function is `async` and must be awaited or executed within an `async` context.
 async fn process_stress_test_async(
     num_transactions: usize,
 ) -> Result<(), Box<dyn std::error::Error>> {
