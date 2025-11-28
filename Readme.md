@@ -232,6 +232,7 @@ Error: Some errors occurred while processing transactions:
 The engine is designed to be memory efficient, processing transactions through buffering the input csv stream to ensure scalability even with large datasets. See `read_and_process_transactions` in `./src/engine.rs`
 
 ### Concurrency Management & input streams (`std::io::Read`)
+#### Sync Version 
 In spite of `./src/main.rs` implementing a single process that reads sequentially from an input CSV stream, the internal `Engine` is designed to support concurrent input transaction streams. Incorporating `DashMap` into the `Engine` struct for managing `accounts` and `transaction_log` provides a thread-safe implementation. <u>By allowing multiple threads to read or write to different entries simultaneously without explicitly locking, `DashMap` reduces lock contention: instead of locking the entire map or individual entries, `DashMap` uses fine-grained locking internally (i.e *sharded locking*), reducing contention when many threads are accessing different parts of the data map. It simplifies the codebase, making it easier to manage concurrent operations across  many of client transactions</u>. This choice supports the goal of creating a high-throughput, low-latency transaction processing system that can scale with demand, all while maintaining code maintainability.<br>
 
 NOTES:
@@ -314,6 +315,17 @@ NOTES:
         Ok(())
     }
     ```
+
+#### Async Verision
+The `AsyncEngine` operate functionally in exaclt the same way as the sync `Engine`, but rely on `ShardedRwLockMap` which expose asyc methods. This allow to build the same logic but complity `async`. This can be beneficial whenver you want to use the transaction engine in a context when many (+thousands) of concurrent events have to be managed  by the engine on the same node. This allow to avoid to spawn a separate OS thread for each event (e.g. connection) which will lead to for every concurrent to performance degradation and system instability. 
+While the Dash map still protect from contetion and locking thrashing, The major implications in this scenario are:
+  1. Context Switching Overhead:  The OS scheduler must pause execution of one thread (save its state/registers) and resume execution of another. 
+  2. Memory Consumption: Every OS thread requires a dedicated block of memory for its stack. Default stack sizes (often 1-2 MB) are multiplied by the number of threads.
+
+
+Architecture, interfaces and api exposed by `AsyncEngine` are exaclty the smae of `Engine`. See [Asyc VS Sync performance assesment](./asyncvssync.md)
+
+
 
 ### Generalization of Disputes:
 - Deposits: When disputing a deposit, you would move the disputed amount from available to held. This keeps the total the same since you're just reallocating the funds.
@@ -448,11 +460,15 @@ The plots also show that both time and memory scale as O(n).
   - Assuming K = 30 days. Also this is quite high value.
   - In a production enviroment the engine processes should be restarted regularly (e.g.: every day): at each restart the process should load from previous session.
 
+
+
 - The solution scales horizontally as follows
   - 200 x 30 days  = 6.000 transactions per client per period have to be stored
   - 1B / 6.000 =  166.666 = ~166.000 (for simplicity) clients per machine.
   - We can add a node increasing throughput and without sacrificing latency, e.g.: a farm with 100 64Gb nodes can manage 16.6 M clients.
   - NOTE: `pub type ClientId = u16` should be moved to `u32` or `u64` as `u16` can only represent 65536 clients.
+
+    **⚠️ NOTE:  Under this assumption both Async and Sync Engine works equally well as the number of thread per seconds is 166000/(30 x 24 x 3600) =  0,06 . So the Sync Engine executed in the context of a thread pool that statcally spwan a few threads works well. Conversely if the system is desiged to frequently flush the transaction log and load only upon `disputes` for example then we have much lower memory constraits forfor a singel node and we would need of an Async engine to manage the muhc higher concurrency. **
 
 - The solution scales vertically as follows
   - increase the node memory will allow to manage more clients per node. e.g.: 256 Gb memory will allow to manage 16.6 x 4 =~ 66 M clients (which is in line with the # of customers of biggest retail banks on earth)
