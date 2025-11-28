@@ -4,7 +4,7 @@ use std::sync::Arc;
 use tempfile::NamedTempFile;
 use tokio::fs::File;
 use txn_engine::{
-    asyncengine::{AsycEngineFunctions, AsyncEngine},
+    asyncengine::{AsyncEngine, AsyncEngineFunctions},
     datastr::transaction::TransactionProcessingError,
     utility::generate_random_transaction_concurrent_stream,
 };

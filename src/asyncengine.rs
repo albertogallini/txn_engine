@@ -37,7 +37,7 @@ pub enum AsycEngineSerDeserError {
     InvalidBool,
 }
 
-pub trait AsycEngineFunctions {
+pub trait AsyncEngineFunctions {
     async fn read_and_process_transactions<R: AsyncRead + Unpin + Send + 'static>(
         &self, // self is NOT mutable as this function can be called concurrently and its implementation must be thread-safe.
         stream: R,
@@ -146,7 +146,7 @@ impl AsyncEngine {
     }
 }
 
-impl AsycEngineFunctions for AsyncEngine {
+impl AsyncEngineFunctions for AsyncEngine {
     async fn read_and_process_transactions<R>(
         &self,
         stream: R,
