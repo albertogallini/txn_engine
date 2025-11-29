@@ -344,7 +344,7 @@ While the **Dash map** still **protects** from **contention** and **locking thra
 2.  **Memory Consumption:** Every OS thread requires a dedicated block of memory for its stack. Default stack sizes (often 1-2 MB) are multiplied by the number of threads.
 
 
-Architecture, interfaces and api exposed by `AsyncEngine` are exaclty the smae of `Engine`. See also [Asyc VS Sync performance assesment](./asyncvssync.md)
+Architecture, interfaces and api exposed by `AsyncEngine` are exactly the same of `Engine`. See also [Asyc VS Sync performance assesment](./asyncvssync.md)
 
 
 
@@ -370,7 +370,9 @@ Architecture, interfaces and api exposed by `AsyncEngine` are exaclty the smae o
 
 NOTE on **locked** account: Once an account is locked, no further actions are possible. Neither the `Engine`/`AsyncEngine` nor `EngineFunctions`/`AsyncEngineFuntions` expose APIs to unlock the account. The only possible way to unlock it is through offline methods (i.e.: manual intervention) on the account storage, followed by loading the `txn_engine` from a previously generated and modified dump (see the next section).
 
-Implementation: see `fn check_transaction_semantic` and `impl EngineFunctions for Engine` in `./src/engine.rs` or equivalent methid in `./src/asyncengine.rs`.
+Implementation: see `fn check_transaction_semantic` and `impl EngineFunctions for Engine` in `./src/engine.rs` or equivalent methods in `./src/asyncengine.rs`. ⚠️ This logic is the same for both sync and async engine.
+
+
 
 ### Engine state serialization/deserialization:
 The `-dump` command line parameter will cause the `Engine` to dump the entire content of the internal `transaction log` to CSV file (in addition to the accounts on the standard output). The file will be written in the current working directory.
