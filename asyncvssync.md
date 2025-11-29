@@ -5,9 +5,9 @@ Here we compare `AsyncEngine` versus `Engine` performance, analyzing their behav
  Here below is a synthetic report of the outcome of what we have measured.
 | Workload                          | Winner       | Speedup       | Reason                                                   |
 |-----------------------------------|--------------|---------------|----------------------------------------------------------|
-| `stress-test.sh` (one huge file)  | **Async**    | **+20–24%**   | Parsing and processing run in **true parallel**          |
 | Concurrency test `reg_test_engine_consistency_with_concurrent_processing/_async` (3 huge files)   | **Sync**         | **~4s faster**    | Channel overhead dominates when no overlap is possible  |
-| Production (Low concurrency/ large in-memory state  )    | **Sync**    |    n/a    | Sync offer sliighly better performance as there is no async runtime overhead. But Asnyc and Sync are oveall equivalent   |
+| `stress-test.sh` (one huge file)  | **Async**    | **+20–24%**   | Parsing and processing run in **true parallel**          |
+| Production (Low concurrency/ large in-memory state  )    | **Sync**    |    n/a    | Sync offer slighly better performance as there is no async runtime overhead. But Asnyc and Sync are oveall equivalent   |
 | Production (10k+ concurrent clients / high frequency  )    | **Async**    |    n/a    | Only async scales to massive concurrent connections     |
 
 In this document, we will provide some quick analysis of these results, explaining why the Async Engine performs better than the Sync Engine and why it sometimes performs worse.
@@ -53,24 +53,6 @@ test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 21 filtered out; fin
 
 **Bottom line:**  
 On this specific benchmark (three 1-million-row files) we pay the unavoidable cost of **3 million channel messages**. Even the fastest channel in the Rust ecosystem (`flume::unbounded`) adds several hundred milliseconds — the ~4-second gap we observe is expected and cannot be eliminated.
-
-### But in  production desinged under the assumption to mange thousdands of concurrent transation on the same engine instance things change: 
-
-```rust
-// Pefromance will drammatically degratate (or even getting a crash) with >10,000 concurrent clients
-for client in 10_000_clients {
-    std::thread::spawn(move || process_client(client));
-}
-
-// This handles hundreds of thousands of connections effortlessly
-for client in 10_000_clients {
-    tokio::spawn(async move {
-        engine.process_transaction(&tx).await;
-    });
-}
-```
-The strong need for an **Async Engine** must be evaluated together with the **overall system design** and the **use cases** (e.g., the actual number of concurrent clients in a unit of time per physical node/instance of the engine). This metric tells us exactly if we get into the scenario of having thousands of **concurrent threads** on the same node (which is not manageable).
-This is well **elaborated** in [The Async vs Sync impact on scalability section in the README.md](./README.md#L484) and put into perspective and relation with the memory footprint of the process.
 
 ## stress test perfomance `stress-test.sh`
 
@@ -198,5 +180,30 @@ By combining `tokio::task::spawn_blocking` with a fast channel, the async engine
 - **One dedicated OS thread** parses the CSV file using the ultra-fast synchronous `csv` crate  
 - **One async worker thread** consume transactions from the channel and update account state
 
-These two phases run **simultaneously** — there is **genuine overlap** between parsing and processing. Given that I'm running on  a multicore machine. 
+These two phases run **simultaneously** — there is **genuine overlap** between parsing and processing. Given that we are running on  a multicore machine. 
 While the sync version does everything sequentially on one thread per file → **no overlap**.
+
+
+## Production/real sysatem yses cases
+
+Production systems can be designed under different assumptions that change the design pattern to follow (sync vs async).
+This is well **elaborated** in the **"Async vs Sync impact on scalabilty"** section in the [Readme.md](./Readme.md#L484) and put into perspective and relation with the memory footprint of the process.
+
+If the requirement is  to manage **thousdands of concurrent transactions** on the same engine instance things change. i.e.:  
+
+```rust
+// Pefromance will drammatically degratate (or even getting a crash) with >10,000 concurrent clients
+for client in 10_000_clients {
+    std::thread::spawn(move || process_client(client));
+}
+
+// This handles hundreds of thousands of connections effortlessly
+for client in 10_000_clients {
+    tokio::spawn(async move {
+        engine.process_transaction(&tx).await;
+    });
+}
+```
+
+But this also **implies** the memory footprint of the process is such that it scales with the higher number of transactions processed in a single node. If there is **no** such need, the **Sync** implementation performs well (sometimes slightly better as there is no additional task runtime overhead) and helps the codebase to remain simpler, also allowing to rely on **battle-tested** data structures like `DashMap`.
+The strong need for an **Async Engine** must be evaluated together with the **overall system design** and the **use cases** (e.g., the actual number of concurrent clients in a unit of time per physical node/instance of the engine). This metric tells us exactly if we get into the scenario of having thousands of **concurrent threads** on the same node.
