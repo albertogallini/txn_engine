@@ -505,7 +505,16 @@ The plots also show that both time and memory scale as O(n).
 
   - Conversely, if the system is **designed skip the transaction validity check so avoiding to keep the transaction log in memory** (the main contributor to memory footprint) and **only load old transactions on demand** (e.g., when a dispute occurs — which is much rarer than deposits/withdrawals), memory usage per node drops dramatically. In this scenario, we can support **much higher concurrency**, and an **Async engine becomes necessary** to handle thousands of concurrent network clients efficiently.
 
-  - Currently, **neither the Async nor Sync engine supports runtime transaction log flushing/loading**. The `load_from_previous_session_csvs` function is blocking and intended only for startup. Even the async version is effectively blocking in this context. To support real-time flushing/loading, we would need a **channel + dedicated background thread** with a producer/consumer pattern — exactly like the one used in `AsyncEngine::read_and_process_transactions`.
+  - Currently, **neither the Async nor Sync engine supports runtime transaction log flushing/loading**. The `load_from_previous_session_csvs` function is blocking and intended only for startup. Even the async version is effectively blocking in this context. To support **real-time log pruning and on-demand dispute resolution**, we would need:
+      - A **background flushing task** (using `spawn_blocking` + channel, exactly like the CSV parser in `read_and_process_transactions`) that continuously writes new transactions to disk and removes old ones from memory.
+      - A **smart lookup mechanism** for disputes that checks:
+        1. In-memory `transaction_log` (fast path)
+        2. The **in-flight buffer** of the flusher task (for recently seen but not-yet-written transactions)
+        3. Persistent storage (disk/DB) as final fallback
+      - Without access to the flusher’s buffer, we risk **"transaction not found"** errors for very recent transactions — even if they’ve already been processed.  
+        This is a classic problem in write-ahead logging systems and is solved by either:
+        - Allowing the dispute handler to query the flusher’s pending buffer (via a shared queue or atomic snapshot), or
+        - Delaying dispute acknowledgment until the transaction is confirmed persisted (consistency vs latency trade-off).
 
   - Additionally, as said, every method currently enforces **transaction ID uniqueness within a session** (defined as the **K**-day dispute window). This limits maximum throughput. To achieve significantly higher transactions-per-second rates, we should **remove the session-wide uniqueness check** and assume transaction IDs are globally unique by design (or validated upstream when actully generated).
 
