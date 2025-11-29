@@ -343,6 +343,8 @@ While the **Dash map** still **protects** from **contention** and **locking thra
 1.  **Context Switching Overhead:** The OS scheduler must pause execution of one thread (save its state/registers) and resume execution of another.
 2.  **Memory Consumption:** Every OS thread requires a dedicated block of memory for its stack. Default stack sizes (often 1-2 MB) are multiplied by the number of threads.
 
+**NOTE:** We cannot safely use `DashMap` directly inside `AsyncEngine`. Although `DashMap` is excellent for synchronous code, it uses `parking_lot::RwLock` internally for each shard. Holding such a lock across an `.await` point **blocks the underlying OS thread** and prevents other async tasks from running — even if they only need a different key in the same shard. This can lead to **severe executor starvation** under contention, dramatically reducing throughput when many tasks concurrently update accounts that happen to fall into the same shard.
+For this reason, `AsyncEngine` uses a custom `ShardedRwLockMap<tokio::sync::RwLock<…>>` instead. The Tokio-aware `RwLock` **yields** during contention, allowing full cooperative scheduling and maintaining high concurrency even under heavy shard pressure.
 
 Architecture, interfaces and api exposed by `AsyncEngine` are exactly the same of `Engine`. See also [Asyc VS Sync performance assesment](./asyncvssync.md)
 
