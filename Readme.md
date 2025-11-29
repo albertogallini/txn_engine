@@ -16,7 +16,7 @@ This project implements a transaction processing system with the following capab
     - The **Asynchronous Engine (`AsyncEngine`)** is **asynchronous** and built on top of a **custom sharded hash map**, **`ShardedRwLockMap`**. This custom map also supports sharded locking but, critically, offers **asynchronous, non-blocking APIs** (e.g., `insert`, `entry`, `iterators`) by leveraging **`tokio::sync::RwLock`**. This is must be used in scenarios requiring **high concurrency** and **low-latency I/O** within a single application process, typically under an asynchronous runtime (like Tokio).
 
 
-**⚠️ NOTE:** This documentation refers mainly to `Engine` to describe the architecture and behaviour. `AsyncEngine` replicates the logic of `Engine`, just offering an async API. Whenever there is a reference to the async engine, a relevant difference in the behaviour and/or in the implications of using an async logic, the ⚠️ symbol is used. Furthermore, the [Asyc VS Sync performance assessment](./asyncvssync.md) document has been added to get into the details of the pros&cons od using an async engine vs a sync one and related use-cases.
+**⚡️ NOTE:** This documentation refers mainly to `Engine` to describe the architecture and behaviour. `AsyncEngine` replicates the logic of `Engine`, just offering an async API. Whenever there is a reference to the async engine, a relevant difference in the behaviour and/or in the implications of using an async logic, the ⚡️ symbol is used. Furthermore, the [Asyc VS Sync performance assessment](./asyncvssync.md) document has been added to get into the details of the pros&cons od using an async engine vs a sync one and related use-cases.
 
 
 ### Features
@@ -33,10 +33,10 @@ This project implements a transaction processing system with the following capab
   - I/O & Ser/DeSer error handling. 
 - **Memory Efficiency**: Processes transactions using stream buffering to manage memory usage even with large datasets.
 - **Concurrency Management Sync Version**: Internal transaction engine state (`accouts` and `transactions_log`) are implemented using [`DashMap`](https://docs.rs/dashmap/latest/dashmap/struct.DashMap.html) to handle concurrent access efficiently.
-- **⚠️ Concurrency Management Async Version**: The async version works similarly to the the Sync version but relying on `ShardedRwLockMap` instead of `DashMap`.
+- **⚡️ Concurrency Management Async Version**: The async version works similarly to the the Sync version but relying on `ShardedRwLockMap` instead of `DashMap`.
 - **Generalization of Disputes**: Disputes are managed on both `Deposit` and `Withdrawal`.
 - **Engine state serialization/deserialization**: The `Engine` struct implementing the transaction engine logic is equipped with `load_from_previous_session_csvs`,`dump_account_to_csv` and `dump_transaction_log_to_csvs` functions serialize/deserialize to/from CSV files the internal state (`account` and `transactions_log`).
-- **⚠️  Async Engine state serialization/deserialization**: The `AsyncEngine` exposes the same apis, but uses `tokio::task::spawn_blocking` to run the CSV parsing in a separate thread and a channel to communicate between the threads. This allows the engine to process transactions concurrently with the parsing, improving performance.
+- **⚡️  Async Engine state serialization/deserialization**: The `AsyncEngine` exposes the same apis, but uses `tokio::task::spawn_blocking` to run the CSV parsing in a separate thread and a channel to communicate between the threads. This allows the engine to process transactions concurrently with the parsing, improving performance.
 
 ## Getting Started
 
@@ -164,7 +164,7 @@ This project consists of a set of key components, each responsible for different
     - The Engine internal state is handled by two DashMaps `accounts` and `transaction_log`. When considering DashMap, operations like insertion, lookup, and removal are generally O(1) in terms of time complexity. However, under heavy contention or in worst-case scenarios, performance might degrade due to the locking mechanism. See *Concurrency Management* section.
     - CSV Operations: File I/O operations can introduce variability due to disk I/O, but from an algorithmic standpoint, reading or writing each record is considered O(1) per operation.
 
-- **⚠️ `asycengine.rs`**
+- **⚡️ `asycengine.rs`**
    - `AsycEngine` is equivalent to `Engine` in terms of exposed apis and complexity analysis.
 
 #### `EngineFunctions` and `EngineStateTransitionFunctions` traits:
@@ -186,12 +186,12 @@ The separation of public and private functions in the `Engine` struct is achieve
     - **`process_resolve`**: Resolves a dispute, releasing the `disputed` transaction. 
     - **`process_chargeback`**: Reverses a disputed transaction, effectively removing the associated funds from the client's account and locking the account.
 
-**⚠️ NOTE:** `AsyncEngine` exposes exaclty the same functions and extends equivalente Async traits : `AsycEngineStateTransitionFunctions` and `AsyncEngineFunctions`
+**⚡️ NOTE:** `AsyncEngine` exposes exaclty the same functions and extends equivalente Async traits : `AsycEngineStateTransitionFunctions` and `AsyncEngineFunctions`
 
 Here below a simplified diagram of the main structs and relationships:<br>
 <img src="./img/scheme.png" width="600">
 
-**⚠️ NOTE:** `AsyncEngine` architecture replicates the same relationship diagram but uses: 
+**⚡️ NOTE:** `AsyncEngine` architecture replicates the same relationship diagram but uses: 
   - the trait `AsycEngineStateTransitionFunctions` in place of `EngineStateTransitionFunctions`
   - the trait `AsyncEngineFunctions` in place of `EngineFunctions`
   - `ShardedRwLockMap` in place of the `DashMap`.
@@ -246,7 +246,7 @@ Error: Some errors occurred while processing transactions:
   - Error processing Transaction { ty: Dispute, client: 9, tx: 21, amount: None, disputed: false }: Transaction not found
 
 ```
-**⚠️ NOTE:** `AsyncEngine` uses exactly the same errors. 
+**⚡️ NOTE:** `AsyncEngine` uses exactly the same errors. 
 
 ### Memory Efficiency
 The engine is designed to be memory efficient, processing transactions through buffering the input csv stream to ensure scalability even with large datasets. See `read_and_process_transactions` in `./src/engine.rs`
@@ -335,7 +335,7 @@ NOTES:
         Ok(())
     }
     ```
-#### ⚠️ Async Version
+#### ⚡️ Async Version
 
 The **`AsyncEngine`** operates functionally in **exactly** the same way as the sync **`Engine`**, but **relies** on **`ShardedRwLockMap`** which **exposes** async methods. This **allows** to build the same logic but **completely** `async`. This can be beneficial **whenever** you want to use the transaction engine in a context where many (+thousands) of concurrent events have to be managed by the engine on the same node. This **allows** to avoid **spawning** a separate **OS thread** for each event (e.g., connection), which would lead to **performance degradation and system instability** due to the volume of concurrent threads.
 
@@ -373,7 +373,7 @@ Architecture, interfaces and api exposed by `AsyncEngine` are exactly the same o
 
 NOTE on **locked** account: Once an account is locked, no further actions are possible. Neither the `Engine`/`AsyncEngine` nor `EngineFunctions`/`AsyncEngineFuntions` expose APIs to unlock the account. The only possible way to unlock it is through offline methods (i.e.: manual intervention) on the account storage, followed by loading the `txn_engine` from a previously generated and modified dump (see the next section).
 
-Implementation: see `fn check_transaction_semantic` and `impl EngineFunctions for Engine` in `./src/engine.rs` or equivalent methods in `./src/asyncengine.rs`. ⚠️ This logic is the same for both sync and async engine.
+Implementation: see `fn check_transaction_semantic` and `impl EngineFunctions for Engine` in `./src/engine.rs` or equivalent methods in `./src/asyncengine.rs`. ⚡️ This logic is the same for both sync and async engine.
 
 
 
@@ -413,7 +413,7 @@ Reasons to use serde:
   (like JSON for API responses, or binary formats for efficiency), Serde can handle these conversions
   without changing your core data structures. This makes your code more adaptable to changes in data storage or transmission methods
 
-**⚠️ NOTE:** Ser/deser is typically a blocking tasks. See [Asyc VS Sync performance assesment](./asyncvssync.md) to check how the deserialization of csv has been managed in an asyc workflow. In particular the section **Benefits of using channels during the async CSV parsing**.
+**⚡️ NOTE:** Ser/deser is typically a blocking tasks. See [Asyc VS Sync performance assesment](./asyncvssync.md) to check how the deserialization of csv has been managed in an asyc workflow. In particular the section **Benefits of using channels during the async CSV parsing**.
 
 ## Stress Test script & performance measure:
 
@@ -466,7 +466,7 @@ The best approach would be to generate the transactions offline and process them
 In reference to the above table, the performance of txn_engine, on the aforementioned assumption, on this machine is ~`1.200.000 transactions/s` with an average `~[17.000 (Process Memory) - 200.000 (Engine Memory)] transactions/MB` memory impact on the user account/transaction log storage.
 The plots also show that both time and memory scale as O(n).
 
-**⚠️NOTE:** See [Async VS Sync performance assessment](./asyncvssync.md) for a comparison between `Engine` abn `AsyncEngine`.
+**⚡️NOTE:** See [Async VS Sync performance assessment](./asyncvssync.md) for a comparison between `Engine` abn `AsyncEngine`.
 
 ### Notes & Comments
 -  The Engine size (`Engine.size_of`) does not take into account the data structure overhead. Please read the comment of `Engine.size_of` for more detalis.
@@ -499,7 +499,7 @@ The plots also show that both time and memory scale as O(n).
 - The solution scales vertically as follows
   - increase the node memory will allow to manage more clients per node. e.g.: 256 Gb memory will allow to manage 16.6 x 4 =~ 66 M clients (which is in line with the # of customers of biggest retail banks on earth)
 
- **⚠️ Important Note: Async vs Sync impact on scalabilty ⚠️**:
+ **⚡️ ⚠️ Important Note: Async vs Sync impact on scalabilty ⚠️**:
 
   - Under the current assumptions, **both the Async and Sync engines work equally well**. The peak concurrency is ~166,000 clients / (30 × 24 × 3600 s) ≈ **0.06 threads per second** per node. A sync engine running on a small, statically-sized thread pool is more than sufficient. The peak is mainly bounded to the memory usage, mainly dominanted by the storage of transactions in memory. This is required as both engines check if the **transaction id is valid** (i.e. NOT duplicated).
 
@@ -549,4 +549,4 @@ tests more readable as we can write the input directly in the test code as CSV.
 6. **`reg_test_serdesr_engine`**: Tests the correctness of serialization and deserialization of the `Engine` to and from CSV files
 7. **`reg_test_engine_consistency_with_concurrent_processing`**: Test that the engine produces consistent results even when processing transactions concurrently.
 
- **⚠️ The same unit/regression tests have been replicated for the async enging**
+ **⚡️ The same unit/regression tests have been replicated for the async enging**
