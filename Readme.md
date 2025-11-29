@@ -410,7 +410,7 @@ Reasons to use serde:
   (like JSON for API responses, or binary formats for efficiency), Serde can handle these conversions
   without changing your core data structures. This makes your code more adaptable to changes in data storage or transmission methods
 
-**⚠️ NOTE:** Ser/deser is typically a blocking tasks. See [Asyc VS Sync performance assesment](./asyncvssync.md) to check how the deserialization of csv has been managed in an asyc workflow. In particular the section **Benefits of using channels during the async CSV parsing**
+**⚠️ NOTE:** Ser/deser is typically a blocking tasks. See [Asyc VS Sync performance assesment](./asyncvssync.md) to check how the deserialization of csv has been managed in an asyc workflow. In particular the section **Benefits of using channels during the async CSV parsing**.
 
 ## Stress Test script & performance measure:
 
@@ -463,7 +463,7 @@ The best approach would be to generate the transactions offline and process them
 In reference to the above table, the performance of txn_engine, on the aforementioned assumption, on this machine is ~`1.200.000 transactions/s` with an average `~[17.000 (Process Memory) - 200.000 (Engine Memory)] transactions/MB` memory impact on the user account/transaction log storage.
 The plots also show that both time and memory scale as O(n).
 
-**⚠️NOTE:** See [Asyc VS Sync performance assessment](./asyncvssync.md) for a comparison between `Engine` abn `AsyncEngine`.
+**⚠️NOTE:** See [Async VS Sync performance assessment](./asyncvssync.md) for a comparison between `Engine` abn `AsyncEngine`.
 
 ### Notes & Comments
 -  The Engine size (`Engine.size_of`) does not take into account the data structure overhead. Please read the comment of `Engine.size_of` for more detalis.
@@ -496,15 +496,15 @@ The plots also show that both time and memory scale as O(n).
 - The solution scales vertically as follows
   - increase the node memory will allow to manage more clients per node. e.g.: 256 Gb memory will allow to manage 16.6 x 4 =~ 66 M clients (which is in line with the # of customers of biggest retail banks on earth)
 
- **⚠️ Important Note: Asyc vs Sync impact on scalabilty ⚠️**:
+ **⚠️ Important Note: Async vs Sync impact on scalabilty ⚠️**:
 
-  - Under the current assumptions, **both the Async and Sync engines work equally well**. The peak concurrency is ~166,000 clients / (30 × 24 × 3600 s) ≈ **0.06 threads per second** per node. A sync engine running on a small, statically-sized thread pool is more than sufficient.
+  - Under the current assumptions, **both the Async and Sync engines work equally well**. The peak concurrency is ~166,000 clients / (30 × 24 × 3600 s) ≈ **0.06 threads per second** per node. A sync engine running on a small, statically-sized thread pool is more than sufficient. The peak is mainly bounded to the memory usage, mainly dominanted by the storage of transactions in memory. This is required as both engines check if the **transaction id is valid** (i.e. NOT duplicated).
 
-  - Conversely, if the system is **designed to frequently flush the transaction log** (the main contributor to memory footprint) and **only load old transactions on demand** (e.g., when a dispute occurs — which is much rarer than deposits/withdrawals), memory usage per node drops dramatically. In this scenario, we can support **much higher concurrency**, and an **Async engine becomes necessary** to handle thousands of concurrent network clients efficiently.
+  - Conversely, if the system is **designed skip the transaction validity check so avoiding to keep the transaction log in memory** (the main contributor to memory footprint) and **only load old transactions on demand** (e.g., when a dispute occurs — which is much rarer than deposits/withdrawals), memory usage per node drops dramatically. In this scenario, we can support **much higher concurrency**, and an **Async engine becomes necessary** to handle thousands of concurrent network clients efficiently.
 
   - Currently, **neither the Async nor Sync engine supports runtime log flushing/loading**. The `load_from_previous_session_csvs` function is blocking and intended only for startup. Even the async version is effectively blocking in this context. To support real-time flushing/loading, we would need a **channel + dedicated background thread** with a producer/consumer pattern — exactly like the one used in `AsyncEngine::read_and_process_transactions`.
 
-  - Additionally, every method currently enforces **transaction ID uniqueness within a session** (defined as the **K**-day dispute window). This limits maximum throughput. To achieve significantly higher transactions-per-second rates, we should **remove the session-wide uniqueness check** and assume transaction IDs are globally unique by design (or validated upstream).
+  - Additionally, as said, every method currently enforces **transaction ID uniqueness within a session** (defined as the **K**-day dispute window). This limits maximum throughput. To achieve significantly higher transactions-per-second rates, we should **remove the session-wide uniqueness check** and assume transaction IDs are globally unique by design (or validated upstream).
 
 
 
@@ -545,3 +545,5 @@ tests more readable as we can write the input directly in the test code as CSV.
 5. **`reg_test_load_from_previous_session_csv`**: Tests loading transactions and accounts from CSV files into the `Engine` nad verifiy the content is correct.
 6. **`reg_test_serdesr_engine`**: Tests the correctness of serialization and deserialization of the `Engine` to and from CSV files
 7. **`reg_test_engine_consistency_with_concurrent_processing`**: Test that the engine produces consistent results even when processing transactions concurrently.
+
+ **⚠️ The same unit/regression tests have been replicated for the async enging**

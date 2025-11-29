@@ -166,7 +166,7 @@ Transactions Count   Time                 Process Memory (MB)  Engine Memory (MB
 2000100              1.75419325s          86.703               3.600  
 ```
 
-When running the realistic stress test (`stress-test.sh`) on a single large file, the **async version wins by up to 24%**:
+When running the realistic stress test (`stress-test.sh`) on a single large file, the **async version wins by up to 24%** while keeping the same memory usage.:
 
 ```text
 2_000_100 transactions:
