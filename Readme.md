@@ -113,6 +113,7 @@ For stress testing suite to measure time and memory conumption:
 ```
 
 ```sh
+# Async mode 
 ./stress-test.sh async
 ```
 
