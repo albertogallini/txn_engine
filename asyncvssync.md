@@ -1,13 +1,17 @@
 # Async Engine VS Sync Engine - Performance analysis
 
-### TL;DR
-Here we compare `AsycEngine` vs `Engine` performance analyizing their behviour under different conditions:
+## TL;DR
+Here we compare `AsyncEngine` versus `Engine` performance, analyzing their behavior under different conditions.
+ Here below is a synthetic report of the outcome of what we have measured.
 | Workload                          | Winner       | Speedup       | Reason                                                   |
 |-----------------------------------|--------------|---------------|----------------------------------------------------------|
 | `stress-test.sh` (one huge file)  | **Async**    | **+20–24%**   | Parsing and processing run in **true parallel**          |
 | Concurrency test `reg_test_engine_consistency_with_concurrent_processing/_async` (3 huge files)   | **Sync**         | **~4s faster**    | Channel overhead dominates when no overlap is possible  |
 | Production (Low concurrency/ large in-memory state  )    | **Sync**    |    n/a    | Sync offer sliighly better performance as there is no async runtime overhead. But Asnyc and Sync are oveall equivalent   |
 | Production (10k+ concurrent clients / high frequency  )    | **Async**    |    n/a    | Only async scales to massive concurrent connections     |
+
+In this document, we will provide some quick analysis of these results, explaining why the Async Engine performs better than the Sync Engine and why it sometimes performs worse.
+
 
 
 ## Analysis of concurrency test unit `reg_test_engine_consistency_with_concurrent_processing/_async`
