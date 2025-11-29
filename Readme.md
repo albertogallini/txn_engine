@@ -501,13 +501,13 @@ The plots also show that both time and memory scale as O(n).
 
  **⚡️ ⚠️ Important Note: Async vs Sync impact on scalabilty ⚠️**:
 
-  - Under the current assumptions, **both the Async and Sync engines work equally well**. The peak concurrency is ~166,000 clients / (30 × 24 × 3600 s) ≈ **0.06 threads per second** per node. A sync engine running on a small, statically-sized thread pool is more than sufficient. The peak is mainly bounded to the memory usage, mainly dominanted by the storage of transactions in memory. This is required as both engines check if the **transaction id is valid** (i.e. NOT duplicated).
+  - Under the current assumptions, **both the Async and Sync engines work equally well**. The peak concurrency is ~166,000 clients / (30 × 24 × 3600 s) ≈ **0.06 threads per second** per node. A sync engine running on a small, statically-sized thread pool is more than sufficient. The peak is mainly bounded to the memory usage, mainly dominanted by the storage of transactions in memory. ⚠️ This is required as both engines check if the **transaction id is valid** (i.e. NOT duplicated).
 
   - Conversely, if the system is **designed skip the transaction validity check so avoiding to keep the transaction log in memory** (the main contributor to memory footprint) and **only load old transactions on demand** (e.g., when a dispute occurs — which is much rarer than deposits/withdrawals), memory usage per node drops dramatically. In this scenario, we can support **much higher concurrency**, and an **Async engine becomes necessary** to handle thousands of concurrent network clients efficiently.
 
-  - Currently, **neither the Async nor Sync engine supports runtime log flushing/loading**. The `load_from_previous_session_csvs` function is blocking and intended only for startup. Even the async version is effectively blocking in this context. To support real-time flushing/loading, we would need a **channel + dedicated background thread** with a producer/consumer pattern — exactly like the one used in `AsyncEngine::read_and_process_transactions`.
+  - Currently, **neither the Async nor Sync engine supports runtime transaction log flushing/loading**. The `load_from_previous_session_csvs` function is blocking and intended only for startup. Even the async version is effectively blocking in this context. To support real-time flushing/loading, we would need a **channel + dedicated background thread** with a producer/consumer pattern — exactly like the one used in `AsyncEngine::read_and_process_transactions`.
 
-  - Additionally, as said, every method currently enforces **transaction ID uniqueness within a session** (defined as the **K**-day dispute window). This limits maximum throughput. To achieve significantly higher transactions-per-second rates, we should **remove the session-wide uniqueness check** and assume transaction IDs are globally unique by design (or validated upstream).
+  - Additionally, as said, every method currently enforces **transaction ID uniqueness within a session** (defined as the **K**-day dispute window). This limits maximum throughput. To achieve significantly higher transactions-per-second rates, we should **remove the session-wide uniqueness check** and assume transaction IDs are globally unique by design (or validated upstream when actully generated).
 
 
 
