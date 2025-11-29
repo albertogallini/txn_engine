@@ -185,12 +185,15 @@ The separation of public and private functions in the `Engine` struct is achieve
     - **`process_resolve`**: Resolves a dispute, releasing the `disputed` transaction. 
     - **`process_chargeback`**: Reverses a disputed transaction, effectively removing the associated funds from the client's account and locking the account.
 
-**⚠️ NOTE:** `AsyncEngine` exposes exaclty the same functions and extends equivalente Asyc traits : `AsycEngineStateTransitionFunctions` and `AsyncEngineFunctions`
+**⚠️ NOTE:** `AsyncEngine` exposes exaclty the same functions and extends equivalente Async traits : `AsycEngineStateTransitionFunctions` and `AsyncEngineFunctions`
 
 Here below a simplified diagram of the main structs and relationships:<br>
 <img src="./img/scheme.png" width="600">
 
-**⚠️ NOTE:** `AsyncEngine` is relationship diagram jusre relaces the traits with `AsycEngineStateTransitionFunctions` and `AsyncEngineFunctions` and the `DashMap` with `ShardedRwLockMap`.
+**⚠️ NOTE:** `AsyncEngine` architecture replicates the same relationship diagram but uses: 
+  - the trait `AsycEngineStateTransitionFunctions` in place of `EngineStateTransitionFunctions`
+  - the trait `AsyncEngineFunctions` in place of `EngineFunctions`
+  - `ShardedRwLockMap` in place of the `DashMap`.
 
 ### Error Handling
 
