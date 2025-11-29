@@ -32,14 +32,20 @@ test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
 running 1 test
 test reg_test_engine_consistency_with_concurrent_processing_async ... ok
 
-test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 20 filtered out; finished in **26.42s**
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 20 filtered out; finished in 26.42s
 
      Running tests/test.rs (target/debug/deps/test-4bf91e7dc903642d)
 
 running 1 test
 test reg_test_engine_consistency_with_concurrent_processing ... ok
 
-test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 21 filtered out; finished in **22.25s**
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 21 filtered out; finished in 22.25s
+
+┌─────────────────────────────────────────────────────┐
+│  Result:                                            │
+│   AsyncEngine : 26.42 s                             │
+│   Sync Engine : 22.25 s  ← **~19% faster**          │
+└─────────────────────────────────────────────────────┘
 ```
 
 | Factor                  | Sync (`std::thread`)                              | Async (`spawn_blocking` + channel)                                       | Winner |
