@@ -190,7 +190,7 @@ These two phases run **simultaneously** — there is **genuine overlap** between
 While the sync version does everything sequentially on one thread per file → **no overlap**.
 
 
-## Production/real sysatem yses cases
+## Production/real systems uses cases
 
 Production systems can be designed under different assumptions that change the design pattern to follow (sync vs async).
 This is well **elaborated** in the **"Async vs Sync impact on scalabilty"** section in the [Readme.md](./Readme.md#L484) and put into perspective and relation with the memory footprint of the process.
