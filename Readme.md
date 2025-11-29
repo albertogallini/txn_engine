@@ -15,7 +15,7 @@ This project implements a transaction processing system with the following capab
     - The **Synchronous Engine (`Engine`)** is synchronous and built on top of **`DashMap`**. **`DashMap`** is a **high-performance, community-standard concurrent hash map** designed for use in **synchronous, multi-threaded environments**. It implements a **sharded locking mechanism**. This approach optimizes **lock granularity**, significantly **reducing contention** between threads and maximizing parallelism. 
     - The **Asynchronous Engine (`AsyncEngine`)** is **asynchronous** and built on top of a **custom sharded hash map**, **`ShardedRwLockMap`**. This custom map also supports sharded locking but, critically, offers **asynchronous, non-blocking APIs** (e.g., `insert`, `entry`, `iterators`) by leveraging **`tokio::sync::RwLock`**. This is must be used in scenarios requiring **high concurrency** and **low-latency I/O** within a single application process, typically under an asynchronous runtime (like Tokio).
 
-**⚠️ NOTE:** This documentation uses main `Engine` to describe the architecture and behaviour as `AsycEngine` replicates the logic of `Engine` just offering asyc api. whenever there is a relevant difference in the beaviour and/or in the implications of using an async logic, the ⚠️ sybmol is used. Furthermore,  [Asyc VS Sync performance assesment](./asyncvssync.md) document has been added to report the performance assesment of using an async engine vs a sync one. 
+**⚠️ NOTE:** This documentation refers mainly to  `Engine` to describe the architecture and behaviour. `AsycEngine` replicates the logic of `Engine` just offering asyc api. Whenever there is a relevant difference in the beaviour and/or in the implications of using an async logic, the ⚠️ sybmol is used. Furthermore,  [Asyc VS Sync performance assesment](./asyncvssync.md) document has been added to report the performance assesment of using an async engine vs a sync one. 
 
 
 ### Features
@@ -32,9 +32,10 @@ This project implements a transaction processing system with the following capab
   - I/O & Ser/DeSer error handling. 
 - **Memory Efficiency**: Processes transactions using stream buffering to manage memory usage even with large datasets.
 - **Concurrency Management Sync Version**: Internal transaction engine state (`accouts` and `transactions_log`) are implemented using [`DashMap`](https://docs.rs/dashmap/latest/dashmap/struct.DashMap.html) to handle concurrent access efficiently.
-- **Concurrency Management Async Version**: The async version uses `tokio::task::spawn_blocking` to run the CSV parsing in a separate thread and a channel to communicate between the threads. This allows the engine to process transactions concurrently with the parsing, improving performance. It uses a brand new Async verison of the Enging: `AsyncEngine` and a new async shareded-locked map `ShardedRwLockMap`
+- **⚠️ Concurrency Management Async Version**: The async version works similarly to the the Sync version but relying on `ShardedRwLockMap` instead of `DashMap`.
 - **Generalization of Disputes**: Disputes are managed on both `Deposit` and `Withdrawal`.
 - **Engine state serialization/deserialization**: The `Engine` struct implementing the transaction engine logic is equipped with `load_from_previous_session_csvs`,`dump_account_to_csv` and `dump_transaction_log_to_csvs` functions serialize/deserialize to/from CSV files the internal state (`account` and `transactions_log`).
+- **⚠️  Async Engine state serialization/deserialization**: The `AsyncEngine` exposes the same apis, but uses `tokio::task::spawn_blocking` to run the CSV parsing in a separate thread and a channel to communicate between the threads. This allows the engine to process transactions concurrently with the parsing, improving performance. It uses a brand new Async verison of the Enging: `AsyncEngine` and a new async shareded-locked map `ShardedRwLockMap`
 
 ## Getting Started
 
