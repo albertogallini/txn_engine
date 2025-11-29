@@ -163,6 +163,9 @@ This project consists of a set of key components, each responsible for different
     - The Engine internal state is handled by two DashMaps `accounts` and `transaction_log`. When considering DashMap, operations like insertion, lookup, and removal are generally O(1) in terms of time complexity. However, under heavy contention or in worst-case scenarios, performance might degrade due to the locking mechanism. See *Concurrency Management* section.
     - CSV Operations: File I/O operations can introduce variability due to disk I/O, but from an algorithmic standpoint, reading or writing each record is considered O(1) per operation.
 
+- **⚠️ `asycengine.rs`**
+   - `AsycEngine` is equivalent to `Engine` in terms of exposed apis and complexity analysis.
+
 #### `EngineFunctions` and `EngineStateTransitionFunctions` traits:
 
 The separation of public and private functions in the `Engine` struct is achieved using two distinct traits: `EngineFunctions` for public APIs and `EngineStateTransitionFunctions` for internal state management, which enhances clarity, reduces complexity, and improves security by preventing unintended modifications.
