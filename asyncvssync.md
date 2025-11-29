@@ -175,7 +175,7 @@ When running the realistic stress test (`stress-test.sh`) on a single large file
 ```
 
 
-### Benefits of using channles during the async CSV parsing (`AsyncEngine::read_and_process_transactions`)
+### Benefits of using channels during the async CSV parsing (`AsyncEngine::read_and_process_transactions`)
 
 ```rust
 spawn_blocking → sync CSV parsing (dedicated real threads)

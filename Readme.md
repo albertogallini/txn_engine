@@ -410,7 +410,7 @@ Reasons to use serde:
   (like JSON for API responses, or binary formats for efficiency), Serde can handle these conversions
   without changing your core data structures. This makes your code more adaptable to changes in data storage or transmission methods
 
-**⚠️ NOTE:** See also [Asyc VS Sync performance assesment](./asyncvssync.md) to check how the deserialization of csv has been maanged in an asyc workflow.
+**⚠️ NOTE:** Ser/deser is typically a blocking tasks. See [Asyc VS Sync performance assesment](./asyncvssync.md) to check how the deserialization of csv has been managed in an asyc workflow. In particular the section **Benefits of using channels during the async CSV parsing**
 
 ## Stress Test script & performance measure:
 
