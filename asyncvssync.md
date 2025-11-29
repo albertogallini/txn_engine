@@ -22,7 +22,7 @@ Two implementations are provided:
 - `AsyncEngine` — fully asynchronous, `tokio` + `spawn_blocking` + channel
 
 
-### Why the pure-sync + `std::thread` version is still faster on this benchmark
+### Why the pure-sync + `std::thread` version is faster on this benchmark
 
 ```
 test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
@@ -212,4 +212,4 @@ for client in 10_000_clients {
 ```
 
 But this also **implies** the memory footprint of the process is such that it scales with the higher number of transactions processed in a single node. If there is **no** such need, the **Sync** implementation performs well (sometimes slightly better as there is no additional task runtime overhead) and helps the codebase to remain simpler, also allowing to rely on **battle-tested** data structures like `DashMap`.
-The strong need for an **Async Engine** must be evaluated together with the **overall system design** and the **use cases** (e.g., the actual number of concurrent clients in a unit of time per physical node/instance of the engine). This metric tells us exactly if we get into the scenario of having thousands of **concurrent threads** on the same node.
+The strong need for an **Async Engine** must be evaluated together with the **overall system design** and the **use cases** (e.g., the actual number of concurrent clients in a unit of time per physical node/instance of the engine).
