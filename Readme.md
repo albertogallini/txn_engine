@@ -35,7 +35,7 @@ This project implements a transaction processing system with the following capab
 - **⚠️ Concurrency Management Async Version**: The async version works similarly to the the Sync version but relying on `ShardedRwLockMap` instead of `DashMap`.
 - **Generalization of Disputes**: Disputes are managed on both `Deposit` and `Withdrawal`.
 - **Engine state serialization/deserialization**: The `Engine` struct implementing the transaction engine logic is equipped with `load_from_previous_session_csvs`,`dump_account_to_csv` and `dump_transaction_log_to_csvs` functions serialize/deserialize to/from CSV files the internal state (`account` and `transactions_log`).
-- **⚠️  Async Engine state serialization/deserialization**: The `AsyncEngine` exposes the same apis, but uses `tokio::task::spawn_blocking` to run the CSV parsing in a separate thread and a channel to communicate between the threads. This allows the engine to process transactions concurrently with the parsing, improving performance. It uses a brand new Async verison of the Enging: `AsyncEngine` and a new async shareded-locked map `ShardedRwLockMap`
+- **⚠️  Async Engine state serialization/deserialization**: The `AsyncEngine` exposes the same apis, but uses `tokio::task::spawn_blocking` to run the CSV parsing in a separate thread and a channel to communicate between the threads. This allows the engine to process transactions concurrently with the parsing, improving performance.
 
 ## Getting Started
 
