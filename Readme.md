@@ -570,6 +570,6 @@ I provided the architectural requirements, coding prototypes, real-world benchma
 I used an iterative process using AI to:
 - Implement the async engine. Asking to write an async version of  the transaction engine -`asyncengine.rs`- to avoid copying and pasting a lot of code from `engine.rs` by hand.
 - Architect the ShardedRwLockMap and quickly get an implementation. I aksed the AI to generate the code for a shared-locking hashmap keeping the public api `async`.
-- Critically analyze the performance, questioning/changing AI-provided implementations of unit/regression-tests and ser/de methods to get an efficient async implementation that could beat the synchronous one on natively blocking parallel tasks (reading from file) (reg_test_engine_consistency_with_concurrent_processing). This has been got by exploiting a spawn_blocking + MPSC channel pattern (by tokio tokio::sync::mpsc) for optimal throughput.
+- Critically analyze the performance, questioning/changing AI-provided implementations of unit/regression-tests and ser/deser methods to get an efficient async implementation that could beat the synchronous one on natively blocking parallel tasks  (`reg_test_engine_consistency_with_concurrent_processing`). This has been got by exploiting a spawn_blocking + MPSC channel pattern (by tokio tokio::sync::mpsc) for optimal throughput.
 - Correct the documentation I wrote and asked to rephrase and double-check for clarity and meaning to make sure the statements were clear (not only to me).
 
