@@ -56,9 +56,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 return Err("Insufficient arguments for async mode".into());
             }
             eprint!("{} ", args[2]);
-            let tokio_runtime =  tokio::runtime::Builder::new_current_thread()
-                    .enable_all()
-                    .build()?;
+            let tokio_runtime = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()?;
             if args[2] == "stress-test" {
                 // asyc stress test mode
                 eprintln!("stress test mode ");
@@ -66,7 +66,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     return Err("Stress test requires a number of transactions to generate".into());
                 }
                 let num_transactions: usize = args[3].parse()?;
-               
+
                 tokio_runtime.block_on(async {
                     match process_stress_test_async(num_transactions).await {
                         Ok(()) => {}

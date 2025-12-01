@@ -198,7 +198,7 @@ This is well **elaborated** in the **"Async vs Sync impact on scalabilty"** sect
 If the requirement is  to manage **thousdands of concurrent transactions** on the same engine instance things change. i.e.:  
 
 ```rust
-// Pefromance will drammatically degratate (or even getting a crash) with >10,000 concurrent clients
+// Peformance will drammatically degrade (or even getting a crash) with >10,000 concurrent clients
 for client in 10_000_clients {
     std::thread::spawn(move || process_client(client));
 }

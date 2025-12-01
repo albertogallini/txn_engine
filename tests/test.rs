@@ -607,7 +607,7 @@ fn unit_test_decimal_precision() {
 /// indicating a `Subtraction overflow`. If no error occurs or a different error
 /// is returned, the test will fail.
 #[test]
-fn unit_test_subrtaction_overflow() {
+fn unit_test_subtraction_overflow() {
     // Create temporary files for transactions and accounts
     let mut transactions_file = NamedTempFile::new().expect("Failed to create temporary file");
     let mut accounts_file = NamedTempFile::new().expect("Failed to create temporary file");

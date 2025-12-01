@@ -10,13 +10,13 @@ This project implements a transaction processing system with the following capab
 - Manages client accounts, including available, held, and total funds.
 - Handles transaction disputes for both deposits and withdrawals.
 - Locks accounts upon chargeback.
-- There are **two** transaction processeing engines. The first -`Engine`- is synchronous and built on top of `DashMap` which implements a sharded locked Hashmap, The second -`AsycEngine`- is asynchronosu and built on topo of custom Hasmap, `ShardedRwLockMap` that supports sharded locking, but, differently form DashMap offers asyc non blocking apis (insert/entry/iterators etc.. ) 
+- There are **two** transaction processeing engines. The first -`Engine`- is synchronous and built on top of `DashMap` which implements a sharded locked Hashmap, The second -`AsyncEngine`- is asynchronous and built on top of a custom hasmap, `ShardedRwLockMap` that supports sharded locking, but, differently from DashMap offers async non blocking apis (insert/entry/iterators etc.. ) 
 - There are **two** distinct transaction processing engines, differentiated primarily by their concurrency model and underlying data structures.
     - The **Synchronous Engine (`Engine`)** is synchronous and built on top of **`DashMap`**. **`DashMap`** is a **high-performance, community-standard concurrent hash map** designed for use in **synchronous, multi-threaded environments**. It implements a **sharded locking mechanism**. This approach optimizes **lock granularity**, significantly **reducing contention** between threads and maximizing parallelism. 
     - The **Asynchronous Engine (`AsyncEngine`)** is **asynchronous** and built on top of a **custom sharded hash map**, **`ShardedRwLockMap`**. This custom map also supports sharded locking but, critically, offers **asynchronous, non-blocking APIs** (e.g., `insert`, `entry`, `iterators`) by leveraging **`tokio::sync::RwLock`**. This is must be used in scenarios requiring **high concurrency** and **low-latency I/O** within a single application process, typically under an asynchronous runtime (like Tokio).
 
 
-**⚡️ NOTE:** This documentation refers mainly to `Engine` to describe the architecture and behaviour. `AsyncEngine` replicates the logic of `Engine`, just offering an async API. Whenever there is a reference to the async engine, a relevant difference in the behaviour and/or in the implications of using an async logic, the ⚡️ symbol is used. Furthermore, the [Asyc VS Sync performance assessment](./asyncvssync.md) document has been added to get into the details of the pros&cons od using an async engine vs a sync one and related use-cases.
+**⚡️ NOTE:** This documentation refers mainly to `Engine` to describe the architecture and behaviour. `AsyncEngine` replicates the logic of `Engine`, just offering an async API. Whenever there is a reference to the async engine, a relevant difference in the behaviour and/or in the implications of using an async logic, the ⚡️ symbol is used. Furthermore, the [Asyc VS Sync performance assessment](./asyncvssync.md) document has been added to get into the details of the pros&cons of using an async engine vs a sync one and related use-cases.
 
 
 ### Features
@@ -32,7 +32,7 @@ This project implements a transaction processing system with the following capab
   - Comprehensive error checks throughout transaction processing.
   - I/O & Ser/DeSer error handling. 
 - **Memory Efficiency**: Processes transactions using stream buffering to manage memory usage even with large datasets.
-- **Concurrency Management Sync Version**: Internal transaction engine state (`accouts` and `transactions_log`) are implemented using [`DashMap`](https://docs.rs/dashmap/latest/dashmap/struct.DashMap.html) to handle concurrent access efficiently.
+- **Concurrency Management Sync Version**: Internal transaction engine state (`accounts` and `transactions_log`) are implemented using [`DashMap`](https://docs.rs/dashmap/latest/dashmap/struct.DashMap.html) to handle concurrent access efficiently.
 - **⚡️ Concurrency Management Async Version**: The async version works similarly to the the Sync version but relying on `ShardedRwLockMap` instead of `DashMap`.
 - **Generalization of Disputes**: Disputes are managed on both `Deposit` and `Withdrawal`.
 - **Engine state serialization/deserialization**: The `Engine` struct implementing the transaction engine logic is equipped with `load_from_previous_session_csvs`,`dump_account_to_csv` and `dump_transaction_log_to_csvs` functions serialize/deserialize to/from CSV files the internal state (`account` and `transactions_log`).
@@ -164,8 +164,8 @@ This project consists of a set of key components, each responsible for different
     - The Engine internal state is handled by two DashMaps `accounts` and `transaction_log`. When considering DashMap, operations like insertion, lookup, and removal are generally O(1) in terms of time complexity. However, under heavy contention or in worst-case scenarios, performance might degrade due to the locking mechanism. See *Concurrency Management* section.
     - CSV Operations: File I/O operations can introduce variability due to disk I/O, but from an algorithmic standpoint, reading or writing each record is considered O(1) per operation.
 
-- **⚡️ `asycengine.rs`**
-   - `AsycEngine` is equivalent to `Engine` in terms of exposed apis and complexity analysis.
+- **⚡️ `AsyncEngine.rs`**
+   - `AsyncEngine` is equivalent to `Engine` in terms of exposed apis and complexity analysis.
 
 #### `EngineFunctions` and `EngineStateTransitionFunctions` traits:
 
@@ -186,13 +186,13 @@ The separation of public and private functions in the `Engine` struct is achieve
     - **`process_resolve`**: Resolves a dispute, releasing the `disputed` transaction. 
     - **`process_chargeback`**: Reverses a disputed transaction, effectively removing the associated funds from the client's account and locking the account.
 
-**⚡️ NOTE:** `AsyncEngine` exposes exaclty the same functions and extends equivalente Async traits : `AsycEngineStateTransitionFunctions` and `AsyncEngineFunctions`
+**⚡️ NOTE:** `AsyncEngine` exposes exactly the same functions and extends equivalente Async traits : `AsyncEngineStateTransitionFunctions` and `AsyncEngineFunctions`
 
 Here below a simplified diagram of the main structs and relationships:<br>
 <img src="./img/scheme.png" width="600">
 
 **⚡️ NOTE:** `AsyncEngine` architecture replicates the same relationship diagram but uses: 
-  - the trait `AsycEngineStateTransitionFunctions` in place of `EngineStateTransitionFunctions`
+  - the trait `AsyncEngineStateTransitionFunctions` in place of `EngineStateTransitionFunctions`
   - the trait `AsyncEngineFunctions` in place of `EngineFunctions`
   - `ShardedRwLockMap` in place of the `DashMap`.
 
@@ -217,14 +217,14 @@ Semantic errors - error conditions on transaction semantic:<br>
 - **EngineError::TransactionAlreadyDisputed**: If a dispute is attempted on an already disputed transaction.
 - **EngineError::TransactionNotDisputed**: If a resolve or chargeback is attempted on a non-disputed transaction.<br>
 
-I/O Error occurring during sereliazion/deserialization<br>
+I/O Error occurring during serialiazion/deserialization<br>
 - **EngineSerDeserError::Io**: I/O error while reading a previous session dump.
 - **EngineSerDeserError::Csv**: Parsing error while reading a previous session session csv dump
 - **EngineSerDeserError::InvalidClientId**: Parsing error while reading a previous session csv -> InvalidClientId
 - **EngineSerDeserError::InvalidDecimal**: Parsing error while reading a previous session csv -> InvalidDecimal
 - **EngineSerDeserError::InvalidDecimal**: Parsing error while reading a previous session csv -> InvalidBool
 
-when the `txn_engine` is executed the errors are reported on the ***stderr*** in a way it is clear to understand which is the trasaction causing the issue. E.g.:
+when the `txn_engine` is executed the errors are reported on the ***stderr*** in a way it is clear to understand which is the transaction causing the issue. E.g.:
 ```
 $ txn_engine % cargo run -- tests/transactions_errors.csv -dump > output.csv
   
@@ -267,8 +267,8 @@ NOTES:
     - Familiar API: DashMap provides an API very similar to HashMap, making it easier for developers familiar with HashMap to transition or use interchangeably in many cases.
     - Iterator Support: It supports iterators, including those that are safe for concurrent use (iter()), which simplifies working with map data in a thread-safe manner.   
 
- -  the `read_and_process_transactions` menthod in the `EngineFunctions` (and its impelmentation in `Engine`) offers the necessary abstraction 
- to process a generic input stream (`std::io::Read`) efficienlty by leveraging on buffering to avoid high memory consumption.
+ -  the `read_and_process_transactions` method in the `EngineFunctions` (and its implementation in `Engine`) offers the necessary abstraction 
+ to process a generic input stream (`std::io::Read`) efficiently by leveraging on buffering to avoid high memory consumption.
  
  -  To have consistent results processing concurrently multiple transactions streams, the streams:
     - must have disjoint client id ranges. This is also related to scalabilty, see also the notes about *sharding* in ***Stress Test script & performance measure*** section.
@@ -387,9 +387,9 @@ The `transactions_log` field is a `dashmap::DashMap<TransactionId, Transaction>`
 The `serde` module is used to serialize/deserialize the `dashmaps`.
 
 Once  the account dump (returned on the standard output) and the transaction log dump by using the `-dump` command line parameter have been obtained, it is possible to use those files to rebuild (i.e. deserialize) the `Engine` internal status.
-This is possible only through internal APIs (see `load_from_previous_session_csvs` Engine function and `test_serdesr_engine` ) and not currenlty exposed as a command line parameter. 
+This is possible only through internal APIs (see `load_from_previous_session_csvs` Engine function and `test_serdesr_engine` ) and not currently exposed as a command line parameter. 
 This function is useful to easily test some edge cases that are not possible if the internal state of an `Engine` is built by the `read_and_process_transactions` `Engine` function that executes all the semantic checks on the 
-transactions. E.g. see `unit_test_subrtaction_overflow` test case.<br>
+transactions. E.g. see `unit_test_subtraction_overflow` test case.<br>
 `load_from_previous_session_csvs` is much faster than `read_and_process_transactions` as there is no semantic check. It is a *blind* decoding of the internal Engine maps dump. For this reason, it 
 is a potentially dangerous functionality and if used in production (e.g.: to quickly restore an instance of the service ***without reading the entire transaction history since inception***), it must be guaranteed 
 the input files have not been modified after being created by the process (e.g. using hashing)<br>
@@ -516,7 +516,7 @@ The plots also show that both time and memory scale as O(n).
         - Allowing the dispute handler to query the flusher’s pending buffer (via a shared queue or atomic snapshot), or
         - Delaying dispute acknowledgment until the transaction is confirmed persisted (consistency vs latency trade-off).
 
-  - Additionally, as said, every method currently enforces **transaction ID uniqueness within a session** (defined as the **K**-day dispute window). This limits maximum throughput. To achieve significantly higher transactions-per-second rates, we should **remove the session-wide uniqueness check** and assume transaction IDs are globally unique by design (or validated upstream when actully generated).
+  - Additionally, as said, every method currently enforces **transaction ID uniqueness within a session** (defined as the **K**-day dispute window). This limits maximum throughput. To achieve significantly higher transactions-per-second rates, we should **remove the session-wide uniqueness check** and assume transaction IDs are globally unique by design (or validated upstream when actually generated).
 
 
 
@@ -544,7 +544,7 @@ Here's a bullet-point list of the functions the test suite with brief descriptio
 12. **`unit_test_withdrawal_from_zero`**: Verifies that attempting to withdraw more than the account balance results in an "Insufficient funds" error.
 13. **`unit_test_addition_overflow`**: Tests the handling of arithmetic overflow during deposit, expecting an addition overflow error.
 14. **`unit_test_decimal_precision`**: Ensures correct handling of decimal precision in transactions, including rounding effects.
-15. **`unit_test_subrtaction_overflow`**: Checks if the engine handles subtraction overflow correctly during a dispute operation.
+15. **`unit_test_subtraction_overflow`**: Checks if the engine handles subtraction overflow correctly during a dispute operation.
 
 NOTE: unit tests should use directly the `EngineStateTransitionFunctions` api implemented by the `Engine`  and skip `read_and_process_transactions_from_csv`, but the deserialization logic here is simple enough that using it makes the 
 tests more readable as we can write the input directly in the test code as CSV.
@@ -554,7 +554,7 @@ tests more readable as we can write the input directly in the test code as CSV.
 2. **`reg_test_from_csv_file_disputed`**: Tests dispute and chargeback operations from CSV file input, ensuring correct account states post-transaction.
 3. **`reg_test_from_csv_file_error_conditions`**: Tests the handling of several erroneous transactions from a CSV file
 4. **`reg_test_from_csv_file_malformed`**: Tests that processing a CSV file with malformed records results in the expected errors
-5. **`reg_test_load_from_previous_session_csv`**: Tests loading transactions and accounts from CSV files into the `Engine` nad verifiy the content is correct.
+5. **`reg_test_load_from_previous_session_csv`**: Tests loading transactions and accounts from CSV files into the `Engine` and verifiy the content is correct.
 6. **`reg_test_serdesr_engine`**: Tests the correctness of serialization and deserialization of the `Engine` to and from CSV files
 7. **`reg_test_engine_consistency_with_concurrent_processing`**: Test that the engine produces consistent results even when processing transactions concurrently.
 
