@@ -14,10 +14,10 @@ for i in $(seq 100 100000 2000100); do
     # Format the number as an integer
     formatted_i=$(printf "%.0f" $i)
     
-    echo "Running stress test for $formatted_i transactions..."
+    echo "Running stress test $1 for $formatted_i transactions..."
 
     # Capture the output of the program in a variable
-    output=$(./target/release/txn_engine stress-test $formatted_i 2>&1)
+    output=$(./target/release/txn_engine $1 stress-test $formatted_i 2>&1)
     echo "$output" > stress_test_results_debug_output_$formatted_i.txt  # Save the output to a debug file
 
     # Grep for memory consumption
