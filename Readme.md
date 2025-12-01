@@ -559,3 +559,17 @@ tests more readable as we can write the input directly in the test code as CSV.
 7. **`reg_test_engine_consistency_with_concurrent_processing`**: Test that the engine produces consistent results even when processing transactions concurrently.
 
  **⚡️ The same unit/regression tests have been replicated for the async enging**
+
+
+
+## AI Usage
+This project is the result of a synergistic collaboration with Grok (xAI) and Gemini (Google). Additionally, I used the Windsurf Extension on VS Code as a coding assistant.
+
+I provided the architectural requirements, coding prototypes, real-world benchmarks, and strategic direction.The AI provided technical depth, immediate feedback loops, and helped go quickly through some compiler errors I could not immediately fix (e.g., lifetime issues). I also used AI to check documentation and behavior of crates like tokio, tokio::sync::mpsc, csv-async, dashmap, etc.
+
+I used an iterative process using AI to:
+- Implement the async engine. Asking to write an async version of  the transaction engine -`asyncengine.rs`- to avoid copying and pasting a lot of code from `engine.rs` by hand.
+- Architect the ShardedRwLockMap and quickly get an implementation. I aksed the AI to generate the code for a shared-locking hashmap keeping the public api `async`.
+- Critically analyze the performance, questioning/changing AI-provided implementations of unit/regression-tests and ser/de methods to get an efficient async implementation that could beat the synchronous one on natively blocking parallel tasks (reading from file) (reg_test_engine_consistency_with_concurrent_processing). This has been got by exploiting a spawn_blocking + MPSC channel pattern (by tokio tokio::sync::mpsc) for optimal throughput.
+- Correct the documentation I wrote and asked to rephrase and double-check for clarity and meaning to make sure the statements were clear (not only to me).
+

@@ -52,13 +52,13 @@ test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 21 filtered out; fin
 |-------------------------|----------------------------------------------------|---------------------------------------------------------------------------|--------|
 | Number of threads       | 3 real OS threads                                  | 3 blocking threads +  async workers threads                             | Sync   |
 | Memory allocations      | Only CSV parsing                                   | +3_000_000 `send()` + 3_000_000 `recv()` allocations                     | Sync   |
-| Channel overhead        | None                                               | `flume` / `tokio::mpsc` ≈ 100–300 ns per message → 300–900 ms total      | Sync   |
+| Channel overhead        | None                                               | `tokio::mpsc` ≈ 100–300 ns per message → 300–900 ms total      | Sync   |
 | Lock contention         | `DashMap` sharding → almost zero contention       | Same `DashMap` (or slightly slower `tokio::RwLock`)                       | Tie    |
 | Context switches        | Almost none                                        | Thousands per second (channel wake-ups)                                   | Sync   |
 | CPU cache efficiency    | Excellent – one thread works on one huge file      | Good, but crossing the channel hurts cache locality                      | Sync   |
 
 **Bottom line:**  
-On this specific benchmark (three 1-million-row files) we pay the unavoidable cost of **3 million channel messages**. Even the fastest channel in the Rust ecosystem (`flume::unbounded`) adds several hundred milliseconds — the ~4-second gap we observe is expected and cannot be eliminated.
+On this specific benchmark (three 1-million-row files) we pay the unavoidable cost of **3 million channel messages**. The channel adds several hundred milliseconds — the ~4-second gap we observe is expected and cannot be eliminated.
 
 ## stress test perfomance `stress-test.sh`
 
@@ -172,7 +172,7 @@ When running the realistic stress test (`stress-test.sh`) on a single large file
 ```rust
 spawn_blocking → sync CSV parsing (dedicated real threads)
         ↓
-   channel (flume)
+   channel (tokio::sync::mpsc)
         ↓
 async task → transaction processing (yields on lock contention)
 ```
