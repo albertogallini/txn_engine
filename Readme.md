@@ -565,7 +565,7 @@ tests more readable as we can write the input directly in the test code as CSV.
 ## AI Usage
 This project is the result of a synergistic collaboration with Grok (xAI) and Gemini (Google). Additionally, I used the Windsurf Extension on VS Code as a coding assistant.
 
-I provided the architectural requirements, coding prototypes, real-world benchmarks, and strategic direction.The AI provided technical depth, immediate feedback loops, and helped go quickly through some compiler errors I could not immediately fix (e.g., lifetime issues). I also used AI to check documentation and behavior of crates like tokio, tokio::sync::mpsc, csv-async, dashmap, etc.
+I provided the architectural requirements, coding prototypes, real-world benchmarks, and strategic direction.The AI provided technical depth, immediate feedback loops, and helped go quickly through some compiler errors I could not quickly see&fix (e.g., some lifetime issues). I also used AI to check documentation and behavior of crates like tokio, tokio::sync::mpsc, csv-async, dashmap, etc.
 
 I used an iterative process using AI to:
 - Implement the async engine. Asking to write an async version of  the transaction engine -`asyncengine.rs`- to avoid copying and pasting a lot of code from `engine.rs` by hand.
